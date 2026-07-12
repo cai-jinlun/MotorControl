@@ -80,15 +80,15 @@ MotorErr_t Motor_SetDirSpeed(MotorHandle_t *motor, MotorDirection_t dir, int16_t
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_SetPosition(MotorHandle_t *motor, int32_t position)
+MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position)
 {
     if (motor == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->setPosition == NULL) {
+    if (motor->ops == NULL || motor->ops->resetPosition == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->setPosition(motor, position);
+    return motor->ops->resetPosition(motor, position);
 }
 
 /* ------------------------------------------------------------------ */

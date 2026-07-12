@@ -60,7 +60,7 @@ typedef struct {
     MotorErr_t (*deinit)(struct MotorHandle *motor);
     MotorErr_t (*setSpeed)(struct MotorHandle *motor, int16_t speed);
     MotorErr_t (*setDirSpeed)(struct MotorHandle *motor, MotorDirection_t dir, int16_t speed);
-    MotorErr_t (*setPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置控制 */
+    MotorErr_t (*resetPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置设置，主要为重置位置 */
     // MotorErr_t (*getStatus)(const struct MotorHandle *motor);
 
     MotorErr_t (*getSpeed)(const struct MotorHandle *motor, int16_t *speed);  /* 可选：驱动速度读取 */
@@ -91,8 +91,8 @@ MotorErr_t Motor_Deinit(MotorHandle_t *motor);
 
 MotorErr_t Motor_SetSpeed(MotorHandle_t *motor, int16_t speed);
 MotorErr_t Motor_SetDirSpeed(MotorHandle_t *motor, MotorDirection_t dir, int16_t speed);
-MotorErr_t Motor_SetPosition(MotorHandle_t *motor, int32_t position);
-
+MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position);
+    
 MotorErr_t Motor_GetSpeed(const MotorHandle_t *motor, int16_t *speed);
 MotorErr_t Motor_GetDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
 MotorErr_t Motor_GetPosition(const MotorHandle_t *motor, int32_t *position);

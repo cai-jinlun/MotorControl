@@ -7,9 +7,10 @@
  * ===================================================================== */
 struct BdcVnhMotorPriv {
     const MotorBDC_VNH_Config_t *cfg;        /* 配置引用（只读） */
-    int16_t                 speed;      /* 当前速度缓存 */
-    MotorDirection_t        dir;        /* 当前方向缓存 */
-    uint8_t                 pwm_active; /* PWM是否已启动 */
+    int16_t                 speed;          /* 当前(驱动)速度缓存 */
+    MotorDirection_t        dir;            /* 当前（驱动）方向缓存 */
+    uint8_t                 pwm_active;     /* PWM是否已启动 */
+    int32_t                 running_time;   /* 运行时间计数器 */
 };
 
 /* =====================================================================
@@ -36,7 +37,7 @@ static const MotorOps_t s_bdc_vnh_ops = {
     .init         = bdc_vnh_init,
     .deinit       = bdc_vnh_deinit,
     .setSpeed     = bdc_vnh_setSpeed,
-    .setDirSpeed = bdc_vnh_setDirSpeed,
+    .setDirSpeed  = bdc_vnh_setDirSpeed,
     // .getStatus    = NULL,
 };
 
