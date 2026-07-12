@@ -60,7 +60,14 @@ typedef struct {
     MotorErr_t (*deinit)(struct MotorHandle *motor);
     MotorErr_t (*setSpeed)(struct MotorHandle *motor, int16_t speed);
     MotorErr_t (*setDirSpeed)(struct MotorHandle *motor, MotorDirection_t dir, int16_t speed);
+    MotorErr_t (*setPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置控制 */
     // MotorErr_t (*getStatus)(const struct MotorHandle *motor);
+
+    MotorErr_t (*getSpeed)(const struct MotorHandle *motor, int16_t *speed);  /* 可选：驱动速度读取 */
+    MotorErr_t (*getDirection)(const struct MotorHandle *motor, MotorDirection_t *dir);  /* 可选：驱动方向读取 */
+    MotorErr_t (*getPosition)(const struct MotorHandle *motor, int32_t *position);  /* 可选：位置读取 */
+    MotorErr_t (*getVelocity)(const struct MotorHandle *motor, float *velocity);  /* 可选：速度（其他方式获得的）读取 */
+    MotorErr_t (*getCurrent)(const struct MotorHandle *motor, float *current);  /* 可选：电流读取 */
 } MotorOps_t;
 
 /* =====================================================================
@@ -84,6 +91,13 @@ MotorErr_t Motor_Deinit(MotorHandle_t *motor);
 
 MotorErr_t Motor_SetSpeed(MotorHandle_t *motor, int16_t speed);
 MotorErr_t Motor_SetDirSpeed(MotorHandle_t *motor, MotorDirection_t dir, int16_t speed);
+MotorErr_t Motor_SetPosition(MotorHandle_t *motor, int32_t position);
+
+MotorErr_t Motor_GetSpeed(const MotorHandle_t *motor, int16_t *speed);
+MotorErr_t Motor_GetDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
+MotorErr_t Motor_GetPosition(const MotorHandle_t *motor, int32_t *position);
+MotorErr_t Motor_GetVelocity(const MotorHandle_t *motor, float *velocity);
+MotorErr_t Motor_GetCurrent(const MotorHandle_t *motor, float *current);
 
 /* 便捷函数：停止 */
 // static inline MotorErr_t Motor_Stop(MotorHandle_t *motor, MotorDirection_t mode)
