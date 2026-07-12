@@ -1,0 +1,54 @@
+# ==========================================
+# STM32CubeMX + Keil uVision 项目 .gitignore
+# ==========================================
+
+# ----- Keil uVision 编译输出 -----
+# 对象文件、依赖文件、交叉引用文件
+MDK-ARM/**/*.o
+MDK-ARM/**/*.d
+MDK-ARM/**/*.crf
+MDK-ARM/**/*.iex
+
+# 链接输出（可执行文件、镜像、MAP）
+MDK-ARM/**/*.axf
+MDK-ARM/**/*.elf
+MDK-ARM/**/*.bin
+MDK-ARM/**/*.hex
+MDK-ARM/**/*.map
+
+# 列表文件与 HTML 报告
+MDK-ARM/**/*.lst
+MDK-ARM/**/*.htm
+MDK-ARM/**/*.dep
+MDK-ARM/**/*.lnp
+
+# Keil 默认输出目录（Objects / Listings）
+MDK-ARM/**/Objects/
+MDK-ARM/**/Listings/
+
+# ----- Keil uVision 用户特定文件 -----
+# GUI 布局文件，包含用户名、窗口位置等个人设置
+MDK-ARM/*.uvguix.*
+
+# 多项目工作区文件
+MDK-ARM/*.uvmpw
+MDK-ARM/*.uvmpw.*
+
+# .uvprojx 为项目主文件，必须保留。
+# .uvoptx 包含项目选项与调试配置，通常保留；若多人协作产生冲突，可取消下一行注释：
+MDK-ARM/*.uvoptx
+
+# ----- VS Code 扩展日志 -----
+# c_cpp_properties.json 包含项目 include 路径，建议保留
+.vscode/*.log
+.vscode/*.lock
+
+# ----- 操作系统临时文件 -----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- 编辑器备份文件 -----
+*.bak
+*.tmp
+*~
