@@ -92,6 +92,18 @@ MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position)
 }
 
 /* ------------------------------------------------------------------ */
+MotorErr_t Motor_SetRunningTime(MotorHandle_t *motor, uint32_t time_ms)
+{
+    if (motor == NULL) return MOTOR_ERR_NULL_PTR;
+    if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
+    if (motor->ops == NULL || motor->ops->setRunningTime == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+
+    return motor->ops->setRunningTime(motor, time_ms);
+}
+
+/* ------------------------------------------------------------------ */
 MotorErr_t Motor_GetSpeed(const MotorHandle_t *motor, int16_t *speed)
 {
     if (motor == NULL || speed == NULL) return MOTOR_ERR_NULL_PTR;
@@ -149,4 +161,16 @@ MotorErr_t Motor_GetCurrent(const MotorHandle_t *motor, float *current)
     }
 
     return motor->ops->getCurrent(motor, current);
+}
+
+/* ------------------------------------------------------------------ */
+MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms)
+{
+    if (motor == NULL || time_ms == NULL) return MOTOR_ERR_NULL_PTR;
+    if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
+    if (motor->ops == NULL || motor->ops->getRunningTime == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+
+    return motor->ops->getRunningTime(motor, time_ms);
 }
