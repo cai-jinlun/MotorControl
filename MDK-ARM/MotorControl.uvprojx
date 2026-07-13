@@ -395,6 +395,26 @@
           <GroupName>Application/User/Core</GroupName>
           <Files>
             <File>
+              <FileName>quad_encoder.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/quad_encoder.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv8714.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/drv8714.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor_bdc_vnh.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\motor_bdc_vnh.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor_driver.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\motor_driver.c</FilePath>
+            </File>
+            <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/main.c</FilePath>
@@ -425,16 +445,6 @@
               <FilePath>../Core/Src/tim.c</FilePath>
             </File>
             <File>
-              <FileName>quad_encoder.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Core/Src/quad_encoder.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv8714.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Core/Src/drv8714.c</FilePath>
-            </File>
-            <File>
               <FileName>stm32f4xx_it.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_it.c</FilePath>
@@ -448,16 +458,6 @@
               <FileName>stm32f4xx_hal_timebase_tim.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_hal_timebase_tim.c</FilePath>
-            </File>
-            <File>
-              <FileName>motor_bdc_vnh.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Core\Src\motor_bdc_vnh.c</FilePath>
-            </File>
-            <File>
-              <FileName>motor_driver.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Core\Src\motor_driver.c</FilePath>
             </File>
           </Files>
         </Group>
