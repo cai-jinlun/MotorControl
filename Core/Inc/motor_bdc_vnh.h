@@ -19,7 +19,7 @@ typedef struct {
     GPIO_TypeDef      *gpio_port_b;    /* 方向控制脚B */
     uint16_t           gpio_pin_b;
     uint32_t           pwm_full_scale; /* 对应100%占空比的ARR比较值（如1000） */
-    uint16_t           dead_zone;      /* 死区：|speed| < dead_zone 时强制输出0 */
+    uint16_t           dead_zone;      /* 死区：|output| < dead_zone 时强制输出0 */
 } MotorBDC_VNH_Config_t;
 
 /* =====================================================================

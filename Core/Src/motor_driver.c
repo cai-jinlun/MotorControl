@@ -51,32 +51,32 @@ MotorErr_t Motor_Deinit(MotorHandle_t *motor)
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_SetSpeed(MotorHandle_t *motor, int16_t speed)
+MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output)
 {
     if (motor == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->setSpeed == NULL) {
+    if (motor->ops == NULL || motor->ops->setOutput == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
-    speed = CLAMP(speed, MOTOR_SPEED_MIN, MOTOR_SPEED_MAX);
+    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
-    return motor->ops->setSpeed(motor, speed);
+    return motor->ops->setOutput(motor, output);
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_SetDirSpeed(MotorHandle_t *motor, MotorDirection_t dir, int16_t speed)
+MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor, MotorDirection_t dir, int16_t output)
 {
     if (motor == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->setDirSpeed == NULL) {
+    if (motor->ops == NULL || motor->ops->setDirOutput == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
     if (dir >= MOTOR_DIR_MAX) {
         return MOTOR_ERR_INVALID_PARAM;
     }
-    speed = CLAMP(speed, MOTOR_SPEED_MIN, MOTOR_SPEED_MAX);
+    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
-    return motor->ops->setDirSpeed(motor, dir, speed);
+    return motor->ops->setDirOutput(motor, dir, output);
 }
 
 /* ------------------------------------------------------------------ */
@@ -104,15 +104,15 @@ MotorErr_t Motor_SetRunningTime(MotorHandle_t *motor, uint32_t time_ms)
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_GetSpeed(const MotorHandle_t *motor, int16_t *speed)
+MotorErr_t Motor_GetOutput(const MotorHandle_t *motor, int16_t *output)
 {
-    if (motor == NULL || speed == NULL) return MOTOR_ERR_NULL_PTR;
+    if (motor == NULL || output == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->getSpeed == NULL) {
+    if (motor->ops == NULL || motor->ops->getOutput == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->getSpeed(motor, speed);
+    return motor->ops->getOutput(motor, output);
 }
 
 /* ------------------------------------------------------------------ */
