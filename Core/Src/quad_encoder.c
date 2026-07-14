@@ -70,6 +70,7 @@ void QuadEncoder_Init(void)
     g_qe.direction        = 0;
     g_qe.first_pulse      = 1U;
     g_qe.pulse_timeout_us = QE_PULSE_TIMEOUT_US;
+    g_qe.velocity         = 0U;
 
     /* 启动 TIM1 CH1/CH2 输入捕获中断；双边沿触发已由 CubeMX 配置 */
     HAL_TIM_IC_Start_IT(QE_TIM_HANDLE, QE_CH_A_NUM);
@@ -167,26 +168,6 @@ uint32_t QuadEncoder_GetPulseUs(void)
 int8_t QuadEncoder_GetDirection(void)
 {
     return g_qe.direction;
-}
-
-float QuadEncoder_GetSpeed_RPM(uint16_t ppr)
-{
-    uint32_t pulse_us = g_qe.pulse_us;
-
-    if ((pulse_us == 0U) || (pulse_us > g_qe.pulse_timeout_us) || (ppr == 0U))
-    {
-        return 0.0f;
-    }
-
-    /* 4x 解码：每转计数 = 4 * ppr */
-    float rpm = 15.0e6f / ((float)ppr * (float)pulse_us);
-    return (g_qe.direction > 0) ? rpm : -rpm;
-}
-
-float QuadEncoder_GetSpeed_Rads(uint16_t ppr)
-{
-    float rpm = QuadEncoder_GetSpeed_RPM(ppr);
-    return rpm * 2.0f * 3.1415926f / 60.0f;
 }
 
 void QuadEncoder_SetPulseTimeout(uint32_t timeout_us)

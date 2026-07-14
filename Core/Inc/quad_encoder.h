@@ -42,6 +42,7 @@ typedef struct
     int8_t   direction;          /* 最近一次变化方向：+1 正转，-1 反转，0 无变化 */
     uint8_t  first_pulse;        /* 1=尚未获得第二个有效脉冲（T 法未就绪） */
     uint32_t pulse_timeout_us;   /* 堵转判定阈值（us） */
+    float    velocity;           /* 速度（单位：每秒脉冲数） */
 } QuadEncoder_TypeDef;
 
 /* 初始化并启动 TIM1 CH1/CH2 输入捕获中断 */
@@ -56,8 +57,6 @@ int32_t  QuadEncoder_GetDeltaCount(void);
 
 /* T 法测速 */
 uint32_t QuadEncoder_GetPulseUs(void);        /* 两次有效计数变化的间隔（us） */
-float    QuadEncoder_GetSpeed_RPM(uint16_t ppr); /* 根据 PPR 计算转速（rpm） */
-float    QuadEncoder_GetSpeed_Rads(uint16_t ppr);/* 根据 PPR 计算角速度（rad/s） */
 int8_t   QuadEncoder_GetDirection(void);      /* 最近一次转动方向 */
 
 /* 设置堵转超时时间（us），超过该时间未收到脉冲 GetSpeed_xxx 返回 0 */
