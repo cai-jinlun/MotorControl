@@ -71,12 +71,14 @@ void Error_Handler(void);
 #define CAN_Silent_GPIO_Port GPIOE
 #define H1_PWM2_Pin GPIO_PIN_10
 #define H1_PWM2_GPIO_Port GPIOB
-#define H3_PWM_Pin GPIO_PIN_11
-#define H3_PWM_GPIO_Port GPIOB
 #define H3_INA_Pin GPIO_PIN_12
 #define H3_INA_GPIO_Port GPIOB
 #define H3_INB_Pin GPIO_PIN_13
 #define H3_INB_GPIO_Port GPIOB
+#define H4_PWM_Pin GPIO_PIN_12
+#define H4_PWM_GPIO_Port GPIOD
+#define H5_PWM_Pin GPIO_PIN_13
+#define H5_PWM_GPIO_Port GPIOD
 #define H_SCK_Pin GPIO_PIN_10
 #define H_SCK_GPIO_Port GPIOC
 #define H_MISO_Pin GPIO_PIN_11
