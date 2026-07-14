@@ -116,51 +116,63 @@ MotorErr_t Motor_GetOutput(const MotorHandle_t *motor, int16_t *output)
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_GetDirection(const MotorHandle_t *motor, MotorDirection_t *dir)
+MotorErr_t Motor_GetDriveDirection(const MotorHandle_t *motor, MotorDirection_t *dir)
 {
     if (motor == NULL || dir == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->getDirection == NULL) {
+    if (motor->ops == NULL || motor->ops->getDriveDirection == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->getDirection(motor, dir);
+    return motor->ops->getDriveDirection(motor, dir);
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_GetPosition(const MotorHandle_t *motor, int32_t *position)
+MotorErr_t Motor_GetMeasuredDirection(const MotorHandle_t *motor, MotorDirection_t *dir)
+{
+    if (motor == NULL || dir == NULL) return MOTOR_ERR_NULL_PTR;
+    if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
+    if (motor->ops == NULL || motor->ops->getMeasuredDirection == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+
+    return motor->ops->getMeasuredDirection(motor, dir);
+}
+
+/* ------------------------------------------------------------------ */
+MotorErr_t Motor_GetMeasuredPosition(const MotorHandle_t *motor, int32_t *position)
 {
     if (motor == NULL || position == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->getPosition == NULL) {
+    if (motor->ops == NULL || motor->ops->getMeasuredPosition == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->getPosition(motor, position);
+    return motor->ops->getMeasuredPosition(motor, position);
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_GetVelocity(const MotorHandle_t *motor, float *velocity)
+MotorErr_t Motor_GetMeasuredVelocity(const MotorHandle_t *motor, float *velocity)
 {
     if (motor == NULL || velocity == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->getVelocity == NULL) {
+    if (motor->ops == NULL || motor->ops->getMeasuredVelocity == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->getVelocity(motor, velocity);
+    return motor->ops->getMeasuredVelocity(motor, velocity);
 }
 
 /* ------------------------------------------------------------------ */
-MotorErr_t Motor_GetCurrent(const MotorHandle_t *motor, float *current)
+MotorErr_t Motor_GetMeasuredCurrent(const MotorHandle_t *motor, float *current)
 {
     if (motor == NULL || current == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
-    if (motor->ops == NULL || motor->ops->getCurrent == NULL) {
+    if (motor->ops == NULL || motor->ops->getMeasuredCurrent == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
 
-    return motor->ops->getCurrent(motor, current);
+    return motor->ops->getMeasuredCurrent(motor, current);
 }
 
 /* ------------------------------------------------------------------ */

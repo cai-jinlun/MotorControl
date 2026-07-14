@@ -65,10 +65,11 @@ typedef struct {
     // MotorErr_t (*getStatus)(const struct MotorHandle *motor);
 
     MotorErr_t (*getOutput)(const struct MotorHandle *motor, int16_t *output);  /* 可选：驱动输出读取 */
-    MotorErr_t (*getDirection)(const struct MotorHandle *motor, MotorDirection_t *dir);  /* 可选：驱动方向读取 */
-    MotorErr_t (*getPosition)(const struct MotorHandle *motor, int32_t *position);  /* 可选：位置读取 */
-    MotorErr_t (*getVelocity)(const struct MotorHandle *motor, float *velocity);  /* 可选：速度（其他方式获得的）读取 */
-    MotorErr_t (*getCurrent)(const struct MotorHandle *motor, float *current);  /* 可选：电流读取 */
+    MotorErr_t (*getDriveDirection)(const struct MotorHandle *motor, MotorDirection_t *dir); /* 可选：驱动方向读取 */
+    MotorErr_t (*getMeasuredDirection)(const struct MotorHandle *motor, MotorDirection_t *dir); /* 可选：测量方向读取 */
+    MotorErr_t (*getMeasuredPosition)(const struct MotorHandle *motor, int32_t *position); /* 可选：测量位置读取 */
+    MotorErr_t (*getMeasuredVelocity)(const struct MotorHandle *motor, float *velocity); /* 可选：测量速度读取 */
+    MotorErr_t (*getMeasuredCurrent)(const struct MotorHandle *motor, float *current); /* 可选：测量电流读取 */
     MotorErr_t (*getRunningTime)(const struct MotorHandle *motor, uint32_t *time_ms); /* 可选：运行时间读取（ms） */
 } MotorOps_t;
 
@@ -97,10 +98,11 @@ MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position);
 MotorErr_t Motor_SetRunningTime(MotorHandle_t *motor, uint32_t time_ms);
     
 MotorErr_t Motor_GetOutput(const MotorHandle_t *motor, int16_t *output);
-MotorErr_t Motor_GetDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
-MotorErr_t Motor_GetPosition(const MotorHandle_t *motor, int32_t *position);
-MotorErr_t Motor_GetVelocity(const MotorHandle_t *motor, float *velocity);
-MotorErr_t Motor_GetCurrent(const MotorHandle_t *motor, float *current);
+MotorErr_t Motor_GetDriveDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
+MotorErr_t Motor_GetMeasuredDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
+MotorErr_t Motor_GetMeasuredPosition(const MotorHandle_t *motor, int32_t *position);
+MotorErr_t Motor_GetMeasuredVelocity(const MotorHandle_t *motor, float *velocity);
+MotorErr_t Motor_GetMeasuredCurrent(const MotorHandle_t *motor, float *current);
 MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms);
 
 /* 便捷函数：停止 */

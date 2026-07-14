@@ -33,11 +33,15 @@ static MotorErr_t bdc_vnh_init(MotorHandle_t *m);
 static MotorErr_t bdc_vnh_deinit(MotorHandle_t *m);
 static MotorErr_t bdc_vnh_setOutput(MotorHandle_t *m, int16_t output);
 static MotorErr_t bdc_vnh_setDirOutput(MotorHandle_t *m, MotorDirection_t dir, int16_t output);
+static MotorErr_t bdc_vnh_getOutput(const MotorHandle_t *m, int16_t *output);
+static MotorErr_t bdc_vnh_getDriveDirection(const MotorHandle_t *m, MotorDirection_t *dir);
 static const MotorOps_t s_bdc_vnh_ops = {
     .init         = bdc_vnh_init,
     .deinit       = bdc_vnh_deinit,
     .setOutput    = bdc_vnh_setOutput,
     .setDirOutput = bdc_vnh_setDirOutput,
+    .getOutput = bdc_vnh_getOutput,
+    .getDriveDirection = bdc_vnh_getDriveDirection,
     // .getStatus    = NULL,
 };
 
@@ -216,6 +220,20 @@ static MotorErr_t bdc_vnh_setDirOutput(MotorHandle_t *m, MotorDirection_t dir, i
         default:
             return MOTOR_ERR_INVALID_PARAM;
     }
+    return MOTOR_OK;
+}
+
+/* ------------------------------------------------------------------ */
+static MotorErr_t bdc_vnh_getOutput(const MotorHandle_t *m, int16_t *output)
+{
+    *output = ((const struct BdcVnhMotorPriv *)m->priv)->output;
+    return MOTOR_OK;
+}
+
+/* ------------------------------------------------------------------ */
+static MotorErr_t bdc_vnh_getDriveDirection(const MotorHandle_t *m, MotorDirection_t *dir)
+{
+    *dir = ((const struct BdcVnhMotorPriv *)m->priv)->dir;
     return MOTOR_OK;
 }
 
