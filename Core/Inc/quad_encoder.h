@@ -31,8 +31,8 @@ extern "C" {
 /*定时器period */
 #define QE_TIM_PERIOD         1000U
 
-/* 默认堵转超时：超过该时间未收到脉冲认为速度为 0，单位 us */
-#define QE_PULSE_TIMEOUT_US   1000000U
+/* 默认堵转超时：超过该时间未收到脉冲认为速度为 0，单位 tick(0.1ms) */
+#define QE_PULSE_TIMEOUT_TICK   10000U
 
 typedef struct
 {
@@ -44,7 +44,8 @@ typedef struct
     uint8_t  last_state;         /* 上一次 AB 状态：bit1=A，bit0=B */
     int8_t   direction;          /* 最近一次变化方向：+1 正转，-1 反转，0 无变化 */
     uint8_t  first_pulse;        /* 1=尚未获得第二个有效脉冲（T 法未就绪） */
-    uint32_t pulse_timeout;      /* 堵转判定阈值 */
+    uint32_t pulse_timeout;      /* 堵转判定阈值（tick） */
+    uint32_t no_pulse_ticks;     /* 距最近一次有效脉冲的时间（tick） */
     float    velocity;           /* 速度（单位：每秒脉冲数） */
 } QuadEncoder_TypeDef;
 
@@ -59,11 +60,12 @@ void     QuadEncoder_SetCount(int32_t value);
 int32_t  QuadEncoder_GetDeltaCount(void);
 
 /* T 法测速 */
-uint32_t QuadEncoder_GetPulseUs(void);        /* 两次有效计数变化的间隔（us） */
+uint32_t QuadEncoder_GetPulseTicks(void);     /* 两次有效计数变化的间隔（tick） */
+float    QuadEncoder_GetVelocity(void);       /* 当前速度（单位：每秒脉冲数，取绝对值） */
 int8_t   QuadEncoder_GetDirection(void);      /* 最近一次转动方向 */
 
-/* 设置堵转超时时间（us），超过该时间未收到脉冲 GetSpeed_xxx 返回 0 */
-void     QuadEncoder_SetPulseTimeout(uint32_t timeout_us);
+/* 设置堵转超时时间（tick）；超时后速度返回 0 */
+void     QuadEncoder_SetPulseTimeout(uint32_t time_tick);
 
 /* 
  * 需在 main.c 的 HAL_TIM_PeriodElapsedCallback 中调用，

@@ -14,7 +14,8 @@
 #include "quad_encoder.h"
 #include "tim.h"
 
-static QuadEncoder_TypeDef g_qe = {0};
+/* 该状态由 TIM1 中断更新，也会在前台代码中读取。 */
+static volatile QuadEncoder_TypeDef g_qe = {0};
 
 /**
   * @brief  读取当前 AB 状态，编码为 (A << 1) | B
@@ -69,12 +70,14 @@ void QuadEncoder_Init(void)
     g_qe.last_state       = QE_ReadState();
     g_qe.direction        = 0;
     g_qe.first_pulse      = 1U;
-    g_qe.pulse_timeout    = QE_PULSE_TIMEOUT_US;
+    g_qe.pulse_timeout    = QE_PULSE_TIMEOUT_TICK;
+    g_qe.no_pulse_ticks   = 0U;
     g_qe.velocity         = 0U;
 
     /* 启动 TIM1 CH1/CH2 输入捕获中断；双边沿触发已由 CubeMX 配置 */
     HAL_TIM_IC_Start_IT(QE_TIM_HANDLE, QE_CH_A_NUM);
     HAL_TIM_IC_Start_IT(QE_TIM_HANDLE, QE_CH_B_NUM);
+    HAL_TIM_Base_Start_IT(QE_TIM_HANDLE);  /* 启动 TIM1 更新中断，用于扩展 T 法计时范围 */
 }
 
 /**
@@ -112,6 +115,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     {
         g_qe.count     += dir;
         g_qe.direction  = dir;
+        g_qe.no_pulse_ticks = 0U;
 
         /* T 法测速：用两次有效计数变化的捕获值差计算脉冲间隔 */
         if (g_qe.first_pulse != 0U)
@@ -123,13 +127,13 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
         else
         {
             uint32_t delta_tick = capture + (g_qe.overflow * QE_TIM_PERIOD) - g_qe.last_capture;
-            if(delta_tick > g_qe.pulse_timeout)
+            if ((delta_tick == 0U) || (delta_tick > g_qe.pulse_timeout))
             {
                 g_qe.velocity = 0.0f;  /* 检测速度为 0 */
             }
             else
             {
-                g_qe.velocity = (float)(1000000U / (delta_tick * QE_TIM_TICK_US));  /* 计算速度，单位：每秒脉冲数 */
+                g_qe.velocity = 1000000.0f / ((float)delta_tick * (float)QE_TIM_TICK_US);  /* 计算速度，单位：每秒脉冲数 */
             }
             g_qe.pulse            = delta_tick;
             g_qe.last_capture     = capture;
@@ -148,6 +152,23 @@ void QuadEncoder_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (htim->Instance == QE_TIM)
     {
         g_qe.overflow++;
+
+        if (g_qe.no_pulse_ticks < g_qe.pulse_timeout)
+        {
+            if ((g_qe.pulse_timeout - g_qe.no_pulse_ticks) <= QE_TIM_PERIOD)
+            {
+                g_qe.no_pulse_ticks = g_qe.pulse_timeout;
+                g_qe.velocity = 0.0f;
+            }
+            else
+            {
+                g_qe.no_pulse_ticks += QE_TIM_PERIOD;
+            }
+        }
+        else
+        {
+            g_qe.velocity = 0.0f;
+        }
     }
 }
 
@@ -168,9 +189,14 @@ int32_t QuadEncoder_GetDeltaCount(void)
     return delta;
 }
 
-uint32_t QuadEncoder_GetPulseUs(void)
+uint32_t QuadEncoder_GetPulseTicks(void)
 {
     return g_qe.pulse;
+}
+
+float QuadEncoder_GetVelocity(void)
+{
+    return g_qe.velocity;
 }
 
 int8_t QuadEncoder_GetDirection(void)
@@ -178,7 +204,7 @@ int8_t QuadEncoder_GetDirection(void)
     return g_qe.direction;
 }
 
-void QuadEncoder_SetPulseTimeout(uint32_t timeout_us)
+void QuadEncoder_SetPulseTimeout(uint32_t time_tick)
 {
-    g_qe.pulse_timeout = timeout_us;
+    g_qe.pulse_timeout = time_tick;
 }
