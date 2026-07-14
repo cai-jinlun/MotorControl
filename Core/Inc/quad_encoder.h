@@ -25,8 +25,11 @@ extern "C" {
 #define QE_CH_B_PORT          H1_Hall_B_GPIO_Port
 #define QE_CH_B_NUM           TIM_CHANNEL_2
 
-/* TIM1 配置：168 MHz / 168 = 1 MHz，1 tick = 1 us */
-#define QE_TIM_TICK_US        1U
+/* TIM1 配置：168 MHz / 16800 = 10 kHz，1 tick = 100 us */
+#define QE_TIM_TICK_US        100U
+
+/*定时器period */
+#define QE_TIM_PERIOD         1000U
 
 /* 默认堵转超时：超过该时间未收到脉冲认为速度为 0，单位 us */
 #define QE_PULSE_TIMEOUT_US   1000000U
@@ -35,13 +38,13 @@ typedef struct
 {
     int32_t  count;              /* 32 位编码器计数值 */
     int32_t  last_count;         /* 上次读取的计数值，用于 M 法测速 */
-    uint32_t pulse_us;           /* 相邻两次有效计数变化的时间间隔（us） */
+    uint32_t pulse;              /* 相邻两次有效计数变化的间隔（定时器计数值） */
     uint32_t last_capture;       /* 上一次捕获的定时器值 */
     uint32_t overflow;           /* 两次捕获之间 TIM1 溢出次数 */
     uint8_t  last_state;         /* 上一次 AB 状态：bit1=A，bit0=B */
     int8_t   direction;          /* 最近一次变化方向：+1 正转，-1 反转，0 无变化 */
     uint8_t  first_pulse;        /* 1=尚未获得第二个有效脉冲（T 法未就绪） */
-    uint32_t pulse_timeout_us;   /* 堵转判定阈值（us） */
+    uint32_t pulse_timeout;      /* 堵转判定阈值 */
     float    velocity;           /* 速度（单位：每秒脉冲数） */
 } QuadEncoder_TypeDef;
 

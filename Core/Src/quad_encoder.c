@@ -63,13 +63,13 @@ void QuadEncoder_Init(void)
 {
     g_qe.count            = 0;
     g_qe.last_count       = 0;
-    g_qe.pulse_us         = 0U;
+    g_qe.pulse            = 0U;
     g_qe.last_capture     = 0U;
     g_qe.overflow         = 0U;
     g_qe.last_state       = QE_ReadState();
     g_qe.direction        = 0;
     g_qe.first_pulse      = 1U;
-    g_qe.pulse_timeout_us = QE_PULSE_TIMEOUT_US;
+    g_qe.pulse_timeout    = QE_PULSE_TIMEOUT_US;
     g_qe.velocity         = 0U;
 
     /* 启动 TIM1 CH1/CH2 输入捕获中断；双边沿触发已由 CubeMX 配置 */
@@ -122,10 +122,18 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
         }
         else
         {
-            uint32_t delta_tick = capture + (g_qe.overflow * 65536U) - g_qe.last_capture;
-            g_qe.pulse_us       = delta_tick * QE_TIM_TICK_US;
-            g_qe.last_capture   = capture;
-            g_qe.overflow       = 0U;
+            uint32_t delta_tick = capture + (g_qe.overflow * QE_TIM_PERIOD) - g_qe.last_capture;
+            if(delta_tick > g_qe.pulse_timeout)
+            {
+                g_qe.velocity = 0.0f;  /* 检测速度为 0 */
+            }
+            else
+            {
+                g_qe.velocity = (float)(1000000U / (delta_tick * QE_TIM_TICK_US));  /* 计算速度，单位：每秒脉冲数 */
+            }
+            g_qe.pulse            = delta_tick;
+            g_qe.last_capture     = capture;
+            g_qe.overflow         = 0U;
         }
     }
 
@@ -162,7 +170,7 @@ int32_t QuadEncoder_GetDeltaCount(void)
 
 uint32_t QuadEncoder_GetPulseUs(void)
 {
-    return g_qe.pulse_us;
+    return g_qe.pulse;
 }
 
 int8_t QuadEncoder_GetDirection(void)
@@ -172,5 +180,5 @@ int8_t QuadEncoder_GetDirection(void)
 
 void QuadEncoder_SetPulseTimeout(uint32_t timeout_us)
 {
-    g_qe.pulse_timeout_us = timeout_us;
+    g_qe.pulse_timeout = timeout_us;
 }
