@@ -104,7 +104,6 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   QuadEncoder_Init();  /* 启动 TIM1 CH1/CH2 输入捕获中断，开始软件正交解码 */
-  DRV8714_Init();      /* 启动 DRV8714 两路 PWM */
   DRV8714_DefaultHBridgeConfig();  /* 默认 H 桥配置，可按实际拓扑修改 */
   if (CurrentSense_Start() != CURRENT_SENSE_OK)
   {

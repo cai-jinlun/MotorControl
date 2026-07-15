@@ -23,12 +23,6 @@ extern "C" {
 #define DRV8714_CS_PORT           H_CS_GPIO_Port
 #define DRV8714_CS_PIN            H_CS_Pin
 
-/* PWM 定时器与通道 */
-#define DRV8714_PWM_TIM           (&htim2)
-#define DRV8714_PWM_CH1           TIM_CHANNEL_2   /* PB3  H1_PWM1 */
-#define DRV8714_PWM_CH2           TIM_CHANNEL_3   /* PB10 H1_PWM2 */
-#define DRV8714_PWM_MAX_DUTY      1000U           /* 与 TIM2 Period 对应 */
-
 /* =============== 寄存器地址 =============== */
 #define DRV8714_REG_IC_STAT1      0x00U
 #define DRV8714_REG_VDS_STAT1     0x01U
@@ -135,9 +129,6 @@ extern "C" {
 
 /* =============== 接口函数 =============== */
 
-/* 初始化：启动两路 PWM 并设置初始占空比为 0 */
-void DRV8714_Init(void);
-
 /* SPI 原始读写。返回的 16bit 中：[15:8]=状态字节，[7:0]=数据字节 */
 uint16_t DRV8714_SPI_Transceive(uint16_t tx_data);
 
@@ -152,10 +143,6 @@ uint8_t  DRV8714_ReadStatus(void);
 void DRV8714_EnableDriver(void);
 void DRV8714_DisableDriver(void);
 void DRV8714_ClearFault(void);
-
-/* 设置 PWM 占空比：duty 范围 0 ~ DRV8714_PWM_MAX_DUTY */
-void DRV8714_SetPWM1(uint16_t duty);
-void DRV8714_SetPWM2(uint16_t duty);
 
 /* 设置单个半桥控制模式：BRG_CTRL_HIZ/LS/HS/PWM */
 void DRV8714_SetHalfBridge(uint8_t hb, uint8_t mode);

@@ -42,18 +42,6 @@ static inline void DRV8714_CS_High(void)
     HAL_GPIO_WritePin(DRV8714_CS_PORT, DRV8714_CS_PIN, GPIO_PIN_SET);
 }
 
-void DRV8714_Init(void)
-{
-    /* 确保 CS 初始高电平（CubeMX 已配置 PD0 初始 SET，此处再保险一次） */
-    DRV8714_CS_High();
-
-    /* 启动两路 PWM，初始占空比 0 */
-    HAL_TIM_PWM_Start(DRV8714_PWM_TIM, DRV8714_PWM_CH1);
-    HAL_TIM_PWM_Start(DRV8714_PWM_TIM, DRV8714_PWM_CH2);
-    DRV8714_SetPWM1(0U);
-    DRV8714_SetPWM2(0U);
-}
-
 uint16_t DRV8714_SPI_Transceive(uint16_t tx_data)
 {
     uint16_t rx_data = 0U;
@@ -112,24 +100,6 @@ void DRV8714_ClearFault(void)
     (void)DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);
 }
 
-void DRV8714_SetPWM1(uint16_t duty)
-{
-    if (duty > DRV8714_PWM_MAX_DUTY)
-    {
-        duty = DRV8714_PWM_MAX_DUTY;
-    }
-    __HAL_TIM_SET_COMPARE(DRV8714_PWM_TIM, DRV8714_PWM_CH1, duty);
-}
-
-void DRV8714_SetPWM2(uint16_t duty)
-{
-    if (duty > DRV8714_PWM_MAX_DUTY)
-    {
-        duty = DRV8714_PWM_MAX_DUTY;
-    }
-    __HAL_TIM_SET_COMPARE(DRV8714_PWM_TIM, DRV8714_PWM_CH2, duty);
-}
-
 void DRV8714_SetHalfBridge(uint8_t hb, uint8_t mode)
 {
     uint8_t pos;
@@ -183,6 +153,9 @@ void DRV8714_MapHalfBridgePWM(uint8_t hb, uint8_t pwm_in)
 void DRV8714_DefaultHBridgeConfig(void)
 {
     uint8_t ctrl1;
+
+    /* 确保 CS 初始高电平（CubeMX 已配置 PD0 初始 SET，此处再保险一次） */
+    DRV8714_CS_High();
 
     /* 解锁寄存器（如需要），写入默认 LOCK 解锁值 */
     ctrl1 = DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);
