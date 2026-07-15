@@ -30,6 +30,7 @@
 /* USER CODE BEGIN Includes */
 #include "quad_encoder.h"
 #include "drv8714.h"
+#include "current_sense.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,6 +106,10 @@ int main(void)
   QuadEncoder_Init();  /* 启动 TIM1 CH1/CH2 输入捕获中断，开始软件正交解码 */
   DRV8714_Init();      /* 启动 DRV8714 两路 PWM */
   DRV8714_DefaultHBridgeConfig();  /* 默认 H 桥配置，可按实际拓扑修改 */
+  if (CurrentSense_Start() != CURRENT_SENSE_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -165,6 +170,21 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
+{
+  CurrentSense_ConvHalfCpltCallback(hadc);
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+  CurrentSense_ConvCpltCallback(hadc);
+}
+
+void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
+{
+  CurrentSense_ErrorCallback(hadc);
+}
 
 /* USER CODE END 4 */
 

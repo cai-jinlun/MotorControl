@@ -427,6 +427,11 @@
               <FilePath>../Core/Src/adc.c</FilePath>
             </File>
             <File>
+              <FileName>current_sense.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/current_sense.c</FilePath>
+            </File>
+            <File>
               <FileName>can.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/can.c</FilePath>
