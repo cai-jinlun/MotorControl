@@ -60,6 +60,7 @@ static const MotorOps_t s_bdc_vnh_ops = {
 static MotorBDC_VNH_Instance_t s_instance_pool[MOTOR_BDC_VNH_INSTANCE_COUNT];
 static uint32_t s_instance_map;
 
+/* 检查创建电机所需的板级回调和配置范围是否完整。 */
 static uint8_t bdc_vnh_config_valid(const MotorBDC_VNH_Config_t *cfg)
 {
     if ((cfg == NULL) || (cfg->port == NULL) ||
@@ -75,6 +76,7 @@ static uint8_t bdc_vnh_config_valid(const MotorBDC_VNH_Config_t *cfg)
     return 1U;
 }
 
+/* 在静态实例池中定位有效句柄；用于防止重复或非法销毁。 */
 static int32_t bdc_vnh_find_instance(const MotorHandle_t *handle)
 {
     uint32_t index;
@@ -88,6 +90,10 @@ static int32_t bdc_vnh_find_instance(const MotorHandle_t *handle)
     return -1;
 }
 
+/*
+ * 根据方向生成 VNH 的 IN_A/IN_B/PWM 真值表并一次提交给板级层。
+ * 正反转使用相反的方向输入；异常时尝试回退 Coast。
+ */
 static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
                                  MotorDirection_t direction,
                                  int16_t output)
@@ -162,11 +168,13 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
     return status;
 }
 
+/* 向通用电机框架注册 BDC_VNH 的操作表。 */
 MotorErr_t MotorBDC_VNH_ModuleInit(void)
 {
     return Motor_RegisterOps(MOTOR_TYPE_BDC_VNH, &s_bdc_vnh_ops);
 }
 
+/* 从静态池创建实例、复制配置并自动进入已初始化的 Coast 状态。 */
 MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg)
 {
     MotorBDC_VNH_Instance_t *instance;
@@ -205,6 +213,7 @@ MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg)
     return &instance->base;
 }
 
+/* 销毁有效实例：先执行一次反初始化，再释放静态池槽位。 */
 void MotorBDC_VNH_Destroy(MotorHandle_t *handle)
 {
     int32_t index = bdc_vnh_find_instance(handle);
@@ -223,6 +232,7 @@ void MotorBDC_VNH_Destroy(MotorHandle_t *handle)
     memset(instance, 0, sizeof(*instance));
 }
 
+/* 调用板级 init 并提交初始 Coast；失败时按生命周期约定回滚。 */
 static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
 {
     MotorBDC_VNH_Private_t *priv;
@@ -260,6 +270,7 @@ static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
     return MOTOR_OK;
 }
 
+/* 先请求 Coast，再仅一次调用板级 deinit 释放资源引用。 */
 static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor)
 {
     MotorBDC_VNH_Private_t *priv;
@@ -287,6 +298,7 @@ static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor)
     return (coast_status != MOTOR_OK) ? coast_status : deinit_status;
 }
 
+/* 保持当前方向，仅更新当前方向对应的 PWM 输出。 */
 static MotorErr_t bdc_vnh_set_output(MotorHandle_t *motor, int16_t output)
 {
     MotorBDC_VNH_Private_t *priv;
@@ -298,6 +310,7 @@ static MotorErr_t bdc_vnh_set_output(MotorHandle_t *motor, int16_t output)
     return bdc_vnh_apply(motor, priv->direction, output);
 }
 
+/* 同时设置方向和输出幅值，由 bdc_vnh_apply 生成完整真值表。 */
 static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
                                           MotorDirection_t direction,
                                           int16_t output)
@@ -305,6 +318,7 @@ static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
     return bdc_vnh_apply(motor, direction, output);
 }
 
+/* 将位置复位请求转发给可选的板级霍尔/编码器实现。 */
 static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor, int32_t position)
 {
     MotorBDC_VNH_Private_t *priv = (MotorBDC_VNH_Private_t *)motor->priv;
@@ -315,6 +329,7 @@ static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor, int32_t position)
     return priv->config.port->reset_position(priv->config.context, position);
 }
 
+/* 读取驱动层缓存的实际归一化输出值。 */
 static MotorErr_t bdc_vnh_get_output(const MotorHandle_t *motor,
                                       int16_t *output)
 {
@@ -324,6 +339,7 @@ static MotorErr_t bdc_vnh_get_output(const MotorHandle_t *motor,
     return MOTOR_OK;
 }
 
+/* 读取最近一次成功提交的驱动方向。 */
 static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
                                                MotorDirection_t *direction)
 {
@@ -333,6 +349,7 @@ static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
     return MOTOR_OK;
 }
 
+/* 根据可选的带符号实测速度换算方向；零速统一视为 Coast。 */
 static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
                                                   MotorDirection_t *direction)
 {
@@ -360,6 +377,7 @@ static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
     return MOTOR_OK;
 }
 
+/* 读取可选板级反馈中的原始位置计数。 */
 static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
                                                  int32_t *position)
 {
@@ -372,6 +390,7 @@ static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
     return priv->config.port->get_position(priv->config.context, position);
 }
 
+/* 读取可选板级反馈中的带符号速度。 */
 static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
                                                  float *velocity)
 {
@@ -384,6 +403,7 @@ static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
     return priv->config.port->get_velocity(priv->config.context, velocity);
 }
 
+/* 读取可选板级反馈中的已标定电流（单位：A）。 */
 static MotorErr_t bdc_vnh_get_measured_current(const MotorHandle_t *motor,
                                                 float *current)
 {

@@ -22,7 +22,9 @@ extern "C" {
  *    内完成引用计数扣减和必要的错误收敛。
  */
 typedef struct {
+    /* 初始化本电机实例所需的板级资源，可在内部执行引用计数加一。 */
     MotorErr_t (*init)(void *context);
+    /* 释放本电机实例所占用的板级资源，可在内部执行引用计数减一。 */
     MotorErr_t (*deinit)(void *context);
 
     /*
@@ -36,15 +38,22 @@ typedef struct {
                               uint16_t pwm);
 
     /* 以下反馈能力可选；NULL 表示对应 MotorOps 不受支持。 */
+    /* 读取霍尔/编码器原始位置计数。 */
     MotorErr_t (*get_position)(void *context, int32_t *position);
+    /* 将霍尔/编码器位置计数设置为指定值。 */
     MotorErr_t (*reset_position)(void *context, int32_t position);
+    /* 读取带符号速度，正负号分别表示正转和反转。 */
     MotorErr_t (*get_velocity)(void *context, float *velocity);
+    /* 读取已由板级层完成标定换算的电流值（单位：A）。 */
     MotorErr_t (*get_current)(void *context, float *current);
 } MotorBDC_VNH_PortOps_t;
 
 typedef struct {
+    /* 板级端口操作表；其生命周期必须长于电机实例。 */
     const MotorBDC_VNH_PortOps_t *port;
+    /* 原样传递给端口操作表的用户上下文。 */
     void                         *context;
+    /* 小于该值的正反转输出会被置零，范围为 0~1000。 */
     uint16_t                      dead_zone;
 } MotorBDC_VNH_Config_t;
 
