@@ -1,239 +1,397 @@
 #include "motor_bdc_vnh.h"
 #include <string.h>
-#include <stdlib.h>   /* for abs() */
 
-/* =====================================================================
- * 私有结构体（对外完全隐藏）
- * ===================================================================== */
-struct BdcVnhMotorPriv {
-    const MotorBDC_VNH_Config_t *cfg;        /* 配置引用（只读） */
-    int16_t                 output;         /* 当前驱动输出缓存 */
-    MotorDirection_t        dir;            /* 当前（驱动）方向缓存 */
-    uint8_t                 pwm_active;     /* PWM是否已启动 */
-    int32_t                 running_time;   /* 运行时间计数器 */
-};
+#ifndef MOTOR_BDC_VNH_INSTANCE_COUNT
+#define MOTOR_BDC_VNH_INSTANCE_COUNT 4U
+#endif
 
-/* =====================================================================
- * 静态内存池（避免堆分配，可预测内存占用）,本项目只会用到1~2个实例，预留4个足够了
- * ===================================================================== */
-#define MOTOR_BDC_VNH_INSTANCE_COUNT 4
+#if (MOTOR_BDC_VNH_INSTANCE_COUNT == 0U) || (MOTOR_BDC_VNH_INSTANCE_COUNT > 32U)
+#error "MOTOR_BDC_VNH_INSTANCE_COUNT must be in the range 1..32"
+#endif
 
 typedef struct {
-    MotorHandle_t      base;   /* 必须放在第一个成员！ */
-    struct BdcVnhMotorPriv priv;
-} BdcVnhMotorInstance_t;
+    MotorBDC_VNH_Config_t config;
+    int16_t               output;
+    MotorDirection_t      direction;
+    uint8_t               init_called;
+    uint8_t               deinit_called;
+} MotorBDC_VNH_Private_t;
 
-static BdcVnhMotorInstance_t s_bdc_vnh_pool[MOTOR_BDC_VNH_INSTANCE_COUNT];
-static uint32_t          s_bdc_vnh_pool_map = 0;   /* 位图：0=空闲，1=占用 */
+typedef struct {
+    MotorHandle_t         base;
+    MotorBDC_VNH_Private_t priv;
+} MotorBDC_VNH_Instance_t;
 
-/* =====================================================================
- * 操作表前置声明
- * ===================================================================== */
-static MotorErr_t bdc_vnh_init(MotorHandle_t *m);
-static MotorErr_t bdc_vnh_deinit(MotorHandle_t *m);
-static MotorErr_t bdc_vnh_setOutput(MotorHandle_t *m, int16_t output);
-static MotorErr_t bdc_vnh_setDirOutput(MotorHandle_t *m, MotorDirection_t dir, int16_t output);
-static MotorErr_t bdc_vnh_getOutput(const MotorHandle_t *m, int16_t *output);
-static MotorErr_t bdc_vnh_getDriveDirection(const MotorHandle_t *m, MotorDirection_t *dir);
+static MotorErr_t bdc_vnh_init(MotorHandle_t *motor);
+static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor);
+static MotorErr_t bdc_vnh_set_output(MotorHandle_t *motor, int16_t output);
+static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
+                                          MotorDirection_t direction,
+                                          int16_t output);
+static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor,
+                                          int32_t position);
+static MotorErr_t bdc_vnh_get_output(const MotorHandle_t *motor,
+                                      int16_t *output);
+static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
+                                               MotorDirection_t *direction);
+static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
+                                                  MotorDirection_t *direction);
+static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
+                                                 int32_t *position);
+static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
+                                                 float *velocity);
+static MotorErr_t bdc_vnh_get_measured_current(const MotorHandle_t *motor,
+                                                float *current);
+
 static const MotorOps_t s_bdc_vnh_ops = {
-    .init         = bdc_vnh_init,
-    .deinit       = bdc_vnh_deinit,
-    .setOutput    = bdc_vnh_setOutput,
-    .setDirOutput = bdc_vnh_setDirOutput,
-    .getOutput = bdc_vnh_getOutput,
-    .getDriveDirection = bdc_vnh_getDriveDirection,
-    // .getStatus    = NULL,
+    .init                  = bdc_vnh_init,
+    .deinit                = bdc_vnh_deinit,
+    .setOutput             = bdc_vnh_set_output,
+    .setDirOutput          = bdc_vnh_set_dir_output,
+    .resetPosition         = bdc_vnh_reset_position,
+    .getOutput             = bdc_vnh_get_output,
+    .getDriveDirection     = bdc_vnh_get_drive_direction,
+    .getMeasuredDirection  = bdc_vnh_get_measured_direction,
+    .getMeasuredPosition   = bdc_vnh_get_measured_position,
+    .getMeasuredVelocity   = bdc_vnh_get_measured_velocity,
+    .getMeasuredCurrent    = bdc_vnh_get_measured_current,
 };
 
-/* =====================================================================
- * 模块初始化
- * ===================================================================== */
-void MotorBDC_VNH_ModuleInit(void)
+static MotorBDC_VNH_Instance_t s_instance_pool[MOTOR_BDC_VNH_INSTANCE_COUNT];
+static uint32_t s_instance_map;
+
+static uint8_t bdc_vnh_config_valid(const MotorBDC_VNH_Config_t *cfg)
 {
-    Motor_RegisterOps(MOTOR_TYPE_BDC_VNH, &s_bdc_vnh_ops);
+    if ((cfg == NULL) || (cfg->port == NULL) ||
+        (cfg->dead_zone > MOTOR_OUTPUT_MAX)) {
+        return 0U;
+    }
+
+    if ((cfg->port->init == NULL) || (cfg->port->deinit == NULL) ||
+        (cfg->port->set_outputs == NULL)) {
+        return 0U;
+    }
+
+    return 1U;
 }
 
-/* =====================================================================
- * 工厂函数
- * ===================================================================== */
-MotorHandle_t* MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg)
+static int32_t bdc_vnh_find_instance(const MotorHandle_t *handle)
 {
-    if (cfg == NULL) return NULL;
-    if (cfg->htim == NULL) return NULL;
-    if (cfg->pwm_full_scale == 0) return NULL;
+    uint32_t index;
 
-    /* 1. 从静态池查找空闲槽 */
-    int idx = -1;
-    for (int i = 0; i < MOTOR_BDC_VNH_INSTANCE_COUNT; i++) {
-        if ((s_bdc_vnh_pool_map & (1UL << i)) == 0) {
-            idx = i;
-            break;
+    for (index = 0U; index < MOTOR_BDC_VNH_INSTANCE_COUNT; ++index) {
+        if (((s_instance_map & (1UL << index)) != 0U) &&
+            (handle == &s_instance_pool[index].base)) {
+            return (int32_t)index;
         }
     }
-    if (idx < 0) return NULL;   /* 池耗尽 */
+    return -1;
+}
 
-    /* 2. 标记占用并清零 */
-    s_bdc_vnh_pool_map |= (1UL << idx);
-    BdcVnhMotorInstance_t *inst = &s_bdc_vnh_pool[idx];
-    memset(inst, 0, sizeof(*inst));
+static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
+                                 MotorDirection_t direction,
+                                 int16_t output)
+{
+    MotorBDC_VNH_Private_t *priv;
+    uint8_t in_a = 0U;
+    uint8_t in_b = 0U;
+    int16_t applied_output = output;
+    MotorErr_t status;
 
-    /* 3. 初始化基类（MotorHandle_t） */
-    inst->base.id             = (uint8_t)idx;
-    inst->base.type           = MOTOR_TYPE_BDC_VNH;
-    inst->base.is_initialized = 0;
-    inst->base.ops            = &s_bdc_vnh_ops;
-    inst->base.priv           = &inst->priv;   /* 指向自己的私有部分 */
+    if ((motor == NULL) || (motor->priv == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    if ((uint32_t)direction >= (uint32_t)MOTOR_DIR_MAX) {
+        return MOTOR_ERR_INVALID_PARAM;
+    }
 
-    /* 4. 初始化私有数据 */
-    inst->priv.cfg        = cfg;
-    inst->priv.output     = 0;
-    inst->priv.dir        = MOTOR_DIR_COAST;
-    inst->priv.pwm_active = 0;
+    priv = (MotorBDC_VNH_Private_t *)motor->priv;
+    if (applied_output < MOTOR_OUTPUT_MIN) {
+        applied_output = MOTOR_OUTPUT_MIN;
+    } else if (applied_output > MOTOR_OUTPUT_MAX) {
+        applied_output = MOTOR_OUTPUT_MAX;
+    }
 
-    /* 5. 自动初始化硬件（失败则回滚） */
-    if (Motor_Init(&inst->base) != MOTOR_OK) {
-        s_bdc_vnh_pool_map &= ~(1UL << idx);
-        memset(inst, 0, sizeof(*inst));
+    switch (direction) {
+    case MOTOR_DIR_FORWARD:
+        in_a = 1U;
+        if (applied_output < (int16_t)priv->config.dead_zone) {
+            applied_output = 0;
+        }
+        break;
+
+    case MOTOR_DIR_BACKWARD:
+        in_b = 1U;
+        if (applied_output < (int16_t)priv->config.dead_zone) {
+            applied_output = 0;
+        }
+        break;
+
+    case MOTOR_DIR_COAST:
+        applied_output = 0;
+        break;
+
+    case MOTOR_DIR_BRAKE:
+        in_a = 1U;
+        in_b = 1U;
+        applied_output = MOTOR_OUTPUT_MAX;
+        break;
+
+    default:
+        return MOTOR_ERR_INVALID_PARAM;
+    }
+
+    status = priv->config.port->set_outputs(priv->config.context,
+                                             in_a,
+                                             in_b,
+                                             (uint16_t)applied_output);
+    if (status == MOTOR_OK) {
+        priv->direction = direction;
+        priv->output = applied_output;
+        return MOTOR_OK;
+    }
+
+    /* 输出提交失败时尽力回到 Coast：A=0、B=0、PWM=0。 */
+    if (priv->config.port->set_outputs(priv->config.context,
+                                        0U,
+                                        0U,
+                                        0U) == MOTOR_OK) {
+        priv->direction = MOTOR_DIR_COAST;
+        priv->output = 0;
+    }
+    return status;
+}
+
+MotorErr_t MotorBDC_VNH_ModuleInit(void)
+{
+    return Motor_RegisterOps(MOTOR_TYPE_BDC_VNH, &s_bdc_vnh_ops);
+}
+
+MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg)
+{
+    MotorBDC_VNH_Instance_t *instance;
+    uint32_t index;
+
+    if (bdc_vnh_config_valid(cfg) == 0U) {
         return NULL;
     }
 
-    return &inst->base;   /* 返回基类指针，外部无法直接访问 priv */
+    for (index = 0U; index < MOTOR_BDC_VNH_INSTANCE_COUNT; ++index) {
+        if ((s_instance_map & (1UL << index)) == 0U) {
+            break;
+        }
+    }
+    if (index >= MOTOR_BDC_VNH_INSTANCE_COUNT) {
+        return NULL;
+    }
+
+    s_instance_map |= (1UL << index);
+    instance = &s_instance_pool[index];
+    memset(instance, 0, sizeof(*instance));
+
+    instance->base.id = (uint8_t)index;
+    instance->base.type = MOTOR_TYPE_BDC_VNH;
+    instance->base.ops = &s_bdc_vnh_ops;
+    instance->base.priv = &instance->priv;
+    instance->priv.config = *cfg;
+    instance->priv.direction = MOTOR_DIR_COAST;
+
+    if (Motor_Init(&instance->base) != MOTOR_OK) {
+        s_instance_map &= ~(1UL << index);
+        memset(instance, 0, sizeof(*instance));
+        return NULL;
+    }
+
+    return &instance->base;
 }
 
-/* =====================================================================
- * 销毁函数，可能用不到
- * ===================================================================== */
 void MotorBDC_VNH_Destroy(MotorHandle_t *handle)
 {
-    if (handle == NULL) return;
+    int32_t index = bdc_vnh_find_instance(handle);
+    MotorBDC_VNH_Instance_t *instance;
 
-    /* 反初始化硬件 */
-    if (handle->ops && handle->ops->deinit) {
-        handle->ops->deinit(handle);
+    if (index < 0) {
+        return;
     }
 
-    /* 通过基地址计算索引（标准C保证：指向结构体的指针 == 指向其首成员的指针） */
-    BdcVnhMotorInstance_t *inst = (BdcVnhMotorInstance_t *)handle;
-    int idx = (int)(inst - s_bdc_vnh_pool);
-
-    if (idx >= 0 && idx < MOTOR_BDC_VNH_INSTANCE_COUNT) {
-        s_bdc_vnh_pool_map &= ~(1UL << idx);
-        memset(inst, 0, sizeof(*inst));
-    }
-}
-
-/* =====================================================================
- * 操作表具体实现
- * ===================================================================== */
-
-/* 硬件初始化：默认置为悬停状态 */
-static MotorErr_t bdc_vnh_init(MotorHandle_t *m)
-{
-    struct BdcVnhMotorPriv *priv = (struct BdcVnhMotorPriv *)m->priv;
-    const MotorBDC_VNH_Config_t *cfg = priv->cfg;
-
-    /* GPIO默认低电平（悬停） */
-    HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_RESET);
-
-    /* 启动PWM，初始占空比0 */
-    if (HAL_TIM_PWM_Start(cfg->htim, cfg->tim_channel) != HAL_OK) {
-        return MOTOR_ERR_HW_FAILURE;
-    }
-    __HAL_TIM_SET_COMPARE(cfg->htim, cfg->tim_channel, 0);
-    priv->pwm_active = 1;
-
-    return MOTOR_OK;
-}
-
-/* 硬件反初始化 */
-static MotorErr_t bdc_vnh_deinit(MotorHandle_t *m)
-{
-    struct BdcVnhMotorPriv *priv = (struct BdcVnhMotorPriv *)m->priv;
-    const MotorBDC_VNH_Config_t *cfg = priv->cfg;
-
-    /* 先进入悬停，再关PWM */
-    HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_RESET);
-    __HAL_TIM_SET_COMPARE(cfg->htim, cfg->tim_channel, 0);
-
-    HAL_TIM_PWM_Stop(cfg->htim, cfg->tim_channel);
-    priv->pwm_active = 0;
-
-    return MOTOR_OK;
-}
-
-/* 设置输出：带死区处理 */
-static MotorErr_t bdc_vnh_setOutput(MotorHandle_t *m, int16_t output)
-{
-    struct BdcVnhMotorPriv *priv = (struct BdcVnhMotorPriv *)m->priv;
-    const MotorBDC_VNH_Config_t *cfg = priv->cfg;
-
-    /* 死区处理 */
-    if (output < cfg->dead_zone) {
-        output = 0;
+    instance = &s_instance_pool[(uint32_t)index];
+    if (instance->base.is_initialized != 0U) {
+        (void)Motor_Deinit(&instance->base);
     }
 
-    priv->output = output;
+    s_instance_map &= ~(1UL << (uint32_t)index);
+    memset(instance, 0, sizeof(*instance));
+}
 
-    /* 线性映射：output(0~1000) -> PWM(0~pwm_full_scale) */
-    uint32_t cmp = ((uint32_t)output * cfg->pwm_full_scale) / MOTOR_OUTPUT_MAX;
-    if (cmp > cfg->pwm_full_scale) cmp = cfg->pwm_full_scale;  //二次保险，可以删除，API接口处已判断
+static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
+{
+    MotorBDC_VNH_Private_t *priv;
+    MotorErr_t status;
 
-    __HAL_TIM_SET_COMPARE(cfg->htim, cfg->tim_channel, cmp);
+    if ((motor == NULL) || (motor->priv == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    priv = (MotorBDC_VNH_Private_t *)motor->priv;
+
+    if (priv->init_called != 0U) {
+        return MOTOR_ERR_ALREADY_INIT;
+    }
+    priv->init_called = 1U;
+
+    status = priv->config.port->init(priv->config.context);
+    if (status != MOTOR_OK) {
+        /* 板级 init 必须自行回滚其中途启动的资源。 */
+        return status;
+    }
+
+    status = priv->config.port->set_outputs(priv->config.context,
+                                             0U,
+                                             0U,
+                                             0U);
+    if (status != MOTOR_OK) {
+        /* init 已成功，因此用一次 deinit 平衡板级资源引用。 */
+        priv->deinit_called = 1U;
+        (void)priv->config.port->deinit(priv->config.context);
+        return status;
+    }
+
+    priv->direction = MOTOR_DIR_COAST;
+    priv->output = 0;
     return MOTOR_OK;
 }
 
-/* 设置方向和输出：H桥真值表 有问题 */
-static MotorErr_t bdc_vnh_setDirOutput(MotorHandle_t *m, MotorDirection_t dir, int16_t output)
+static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor)
 {
-    struct BdcVnhMotorPriv *priv = (struct BdcVnhMotorPriv *)m->priv;
-    const MotorBDC_VNH_Config_t *cfg = priv->cfg;
+    MotorBDC_VNH_Private_t *priv;
+    MotorErr_t coast_status;
+    MotorErr_t deinit_status;
 
-    priv->dir = dir;
+    if ((motor == NULL) || (motor->priv == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    priv = (MotorBDC_VNH_Private_t *)motor->priv;
 
-    switch (dir) {
-        case MOTOR_DIR_FORWARD:
-            HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_SET);
-            HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_RESET);
-            bdc_vnh_setOutput(m, output);
-            break;
+    if (priv->deinit_called != 0U) {
+        return MOTOR_OK;
+    }
 
-        case MOTOR_DIR_BACKWARD:
-            HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_SET);
-            bdc_vnh_setOutput(m, output);
-            break;
+    coast_status = priv->config.port->set_outputs(priv->config.context,
+                                                   0U,
+                                                   0U,
+                                                   0U);
+    priv->deinit_called = 1U;
+    deinit_status = priv->config.port->deinit(priv->config.context);
+    priv->direction = MOTOR_DIR_COAST;
+    priv->output = 0;
 
-        case MOTOR_DIR_COAST:
-            HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_RESET);
-            bdc_vnh_setOutput(m, 0);
-            break;
+    return (coast_status != MOTOR_OK) ? coast_status : deinit_status;
+}
 
-        case MOTOR_DIR_BRAKE:
-            HAL_GPIO_WritePin(cfg->gpio_port_a, cfg->gpio_pin_a, GPIO_PIN_SET);
-            HAL_GPIO_WritePin(cfg->gpio_port_b, cfg->gpio_pin_b, GPIO_PIN_SET);
-            bdc_vnh_setOutput(m, cfg->pwm_full_scale);
-            break;
+static MotorErr_t bdc_vnh_set_output(MotorHandle_t *motor, int16_t output)
+{
+    MotorBDC_VNH_Private_t *priv;
 
-        default:
-            return MOTOR_ERR_INVALID_PARAM;
+    if ((motor == NULL) || (motor->priv == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    priv = (MotorBDC_VNH_Private_t *)motor->priv;
+    return bdc_vnh_apply(motor, priv->direction, output);
+}
+
+static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
+                                          MotorDirection_t direction,
+                                          int16_t output)
+{
+    return bdc_vnh_apply(motor, direction, output);
+}
+
+static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor, int32_t position)
+{
+    MotorBDC_VNH_Private_t *priv = (MotorBDC_VNH_Private_t *)motor->priv;
+
+    if (priv->config.port->reset_position == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+    return priv->config.port->reset_position(priv->config.context, position);
+}
+
+static MotorErr_t bdc_vnh_get_output(const MotorHandle_t *motor,
+                                      int16_t *output)
+{
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+    *output = priv->output;
+    return MOTOR_OK;
+}
+
+static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
+                                               MotorDirection_t *direction)
+{
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+    *direction = priv->direction;
+    return MOTOR_OK;
+}
+
+static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
+                                                  MotorDirection_t *direction)
+{
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+    float velocity;
+    MotorErr_t status;
+
+    if (priv->config.port->get_velocity == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+
+    status = priv->config.port->get_velocity(priv->config.context, &velocity);
+    if (status != MOTOR_OK) {
+        return status;
+    }
+
+    if (velocity > 0.0f) {
+        *direction = MOTOR_DIR_FORWARD;
+    } else if (velocity < 0.0f) {
+        *direction = MOTOR_DIR_BACKWARD;
+    } else {
+        *direction = MOTOR_DIR_COAST;
     }
     return MOTOR_OK;
 }
 
-/* ------------------------------------------------------------------ */
-static MotorErr_t bdc_vnh_getOutput(const MotorHandle_t *m, int16_t *output)
+static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
+                                                 int32_t *position)
 {
-    *output = ((const struct BdcVnhMotorPriv *)m->priv)->output;
-    return MOTOR_OK;
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+
+    if (priv->config.port->get_position == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+    return priv->config.port->get_position(priv->config.context, position);
 }
 
-/* ------------------------------------------------------------------ */
-static MotorErr_t bdc_vnh_getDriveDirection(const MotorHandle_t *m, MotorDirection_t *dir)
+static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
+                                                 float *velocity)
 {
-    *dir = ((const struct BdcVnhMotorPriv *)m->priv)->dir;
-    return MOTOR_OK;
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+
+    if (priv->config.port->get_velocity == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+    return priv->config.port->get_velocity(priv->config.context, velocity);
 }
 
+static MotorErr_t bdc_vnh_get_measured_current(const MotorHandle_t *motor,
+                                                float *current)
+{
+    const MotorBDC_VNH_Private_t *priv =
+        (const MotorBDC_VNH_Private_t *)motor->priv;
+
+    if (priv->config.port->get_current == NULL) {
+        return MOTOR_ERR_NOT_SUPPORTED;
+    }
+    return priv->config.port->get_current(priv->config.context, current);
+}
