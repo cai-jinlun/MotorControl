@@ -11,6 +11,13 @@ extern "C" {
 /*
  * motor_bdc_vnh 与具体 MCU/板卡之间的连接接口。
  *
+ * 硬件前提：
+ * 本类电机（门锁解锁/复位电机与吸合电机）在机构上没有霍尔传感器，
+ * 控制板也未为其提供 ADC 电流采集，因此本驱动不提供位置、速度与
+ * 电流反馈能力；对应的通用电机 API 将返回 MOTOR_ERR_NOT_SUPPORTED。
+ * 此类电机的行程控制与超时保护以运行时间（Motor_SetRunningTime /
+ * Motor_GetRunningTime）作为主要判据。
+ *
  * 生命周期约定：
  * 1. 每个成功创建的实例只调用一次 init。
  * 2. 每次有效销毁只调用一次 deinit，板级层可在其中实现引用计数。
@@ -37,15 +44,11 @@ typedef struct {
                               uint8_t in_b,
                               uint16_t pwm);
 
-    /* 以下反馈能力可选；NULL 表示对应 MotorOps 不受支持。 */
-    /* 读取霍尔/编码器原始位置计数。 */
-    MotorErr_t (*get_position)(void *context, int32_t *position);
-    /* 将霍尔/编码器位置计数设置为指定值。 */
-    MotorErr_t (*reset_position)(void *context, int32_t position);
-    /* 读取带符号速度，正负号分别表示正转和反转。 */
-    MotorErr_t (*get_velocity)(void *context, float *velocity);
-    /* 读取已由板级层完成标定换算的电流值（单位：A）。 */
-    MotorErr_t (*get_current)(void *context, float *current);
+    /*
+     * 获取系统毫秒时钟（通常绑定 HAL_GetTick），用于运行时间统计。
+     * 板级层负责提供；驱动层不直接依赖 HAL 时钟。
+     */
+    MotorErr_t (*get_time_ms)(void *context, uint32_t *time_ms);
 } MotorBDC_VNH_PortOps_t;
 
 typedef struct {

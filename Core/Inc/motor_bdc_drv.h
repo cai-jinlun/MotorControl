@@ -33,6 +33,12 @@ typedef struct {
      */
     MotorErr_t (*set_inputs)(void *context, uint16_t in1, uint16_t in2);
 
+    /*
+     * 获取系统毫秒时钟（通常绑定 HAL_GetTick），用于运行时间统计。
+     * 板级层负责提供；驱动层不直接依赖 HAL 时钟。
+     */
+    MotorErr_t (*get_time_ms)(void *context, uint32_t *time_ms);
+
     /* 读取霍尔/编码器原始位置计数。 */
     MotorErr_t (*get_position)(void *context, int32_t *position);
     /* 将霍尔/编码器位置计数设置为指定值。 */
