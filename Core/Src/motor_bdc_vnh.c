@@ -1,4 +1,5 @@
 #include "motor_bdc_vnh.h"
+#include "motor_runtime.h"
 #include <string.h>
 
 #ifndef MOTOR_BDC_VNH_INSTANCE_COUNT
@@ -13,6 +14,7 @@ typedef struct {
     MotorBDC_VNH_Config_t config;
     int16_t               output;
     MotorDirection_t      direction;
+    MotorRuntime_t        runtime;     /* 运行时间统计（以实际有效输出为判据） */
     uint8_t               init_called;
     uint8_t               deinit_called;
 } MotorBDC_VNH_Private_t;
@@ -28,33 +30,28 @@ static MotorErr_t bdc_vnh_set_output(MotorHandle_t *motor, int16_t output);
 static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
                                           MotorDirection_t direction,
                                           int16_t output);
-static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor,
-                                          int32_t position);
+static MotorErr_t bdc_vnh_set_running_time(MotorHandle_t *motor,
+                                            uint32_t time_ms);
 static MotorErr_t bdc_vnh_get_output(const MotorHandle_t *motor,
                                       int16_t *output);
 static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
                                                MotorDirection_t *direction);
-static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
-                                                  MotorDirection_t *direction);
-static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
-                                                 int32_t *position);
-static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
-                                                 float *velocity);
-static MotorErr_t bdc_vnh_get_measured_current(const MotorHandle_t *motor,
-                                                float *current);
+static MotorErr_t bdc_vnh_get_running_time(const MotorHandle_t *motor,
+                                            uint32_t *time_ms);
 
+/*
+ * VNH 类电机无位置/速度/电流反馈硬件，相关通用 API 条目保持 NULL，
+ * 上层调用时将得到 MOTOR_ERR_NOT_SUPPORTED。
+ */
 static const MotorOps_t s_bdc_vnh_ops = {
     .init                  = bdc_vnh_init,
     .deinit                = bdc_vnh_deinit,
     .setOutput             = bdc_vnh_set_output,
     .setDirOutput          = bdc_vnh_set_dir_output,
-    .resetPosition         = bdc_vnh_reset_position,
+    .setRunningTime        = bdc_vnh_set_running_time,
     .getOutput             = bdc_vnh_get_output,
     .getDriveDirection     = bdc_vnh_get_drive_direction,
-    .getMeasuredDirection  = bdc_vnh_get_measured_direction,
-    .getMeasuredPosition   = bdc_vnh_get_measured_position,
-    .getMeasuredVelocity   = bdc_vnh_get_measured_velocity,
-    .getMeasuredCurrent    = bdc_vnh_get_measured_current,
+    .getRunningTime        = bdc_vnh_get_running_time,
 };
 
 static MotorBDC_VNH_Instance_t s_instance_pool[MOTOR_BDC_VNH_INSTANCE_COUNT];
@@ -69,7 +66,8 @@ static uint8_t bdc_vnh_config_valid(const MotorBDC_VNH_Config_t *cfg)
     }
 
     if ((cfg->port->init == NULL) || (cfg->port->deinit == NULL) ||
-        (cfg->port->set_outputs == NULL)) {
+        (cfg->port->set_outputs == NULL) ||
+        (cfg->port->get_time_ms == NULL)) {
         return 0U;
     }
 
@@ -88,6 +86,22 @@ static int32_t bdc_vnh_find_instance(const MotorHandle_t *handle)
         }
     }
     return -1;
+}
+
+/*
+ * 读取板级毫秒时钟并推进运行时间统计。
+ * running 为死区处理后的实际运行状态；时钟读取失败时跳过本次更新，
+ * 不影响输出提交结果。
+ */
+static void bdc_vnh_update_runtime(MotorBDC_VNH_Private_t *priv,
+                                    uint8_t running)
+{
+    uint32_t now_ms;
+
+    if (priv->config.port->get_time_ms(priv->config.context,
+                                       &now_ms) == MOTOR_OK) {
+        MotorRuntime_Update(&priv->runtime, running, now_ms);
+    }
 }
 
 /*
@@ -152,6 +166,15 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
                                              in_b,
                                              (uint16_t)applied_output);
     if (status == MOTOR_OK) {
+        uint8_t running = 0U;
+
+        if (((direction == MOTOR_DIR_FORWARD) ||
+             (direction == MOTOR_DIR_BACKWARD)) &&
+            (applied_output > 0)) {
+            running = 1U;
+        }
+        bdc_vnh_update_runtime(priv, running);
+
         priv->direction = direction;
         priv->output = applied_output;
         return MOTOR_OK;
@@ -162,6 +185,7 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
                                         0U,
                                         0U,
                                         0U) == MOTOR_OK) {
+        bdc_vnh_update_runtime(priv, 0U);
         priv->direction = MOTOR_DIR_COAST;
         priv->output = 0;
     }
@@ -290,6 +314,7 @@ static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor)
                                                    0U,
                                                    0U,
                                                    0U);
+    bdc_vnh_update_runtime(priv, 0U);
     priv->deinit_called = 1U;
     deinit_status = priv->config.port->deinit(priv->config.context);
     priv->direction = MOTOR_DIR_COAST;
@@ -318,15 +343,24 @@ static MotorErr_t bdc_vnh_set_dir_output(MotorHandle_t *motor,
     return bdc_vnh_apply(motor, direction, output);
 }
 
-/* 将位置复位请求转发给可选的板级霍尔/编码器实现。 */
-static MotorErr_t bdc_vnh_reset_position(MotorHandle_t *motor, int32_t position)
+/*
+ * 重置/设置累计运行时间。运行中调用时，当前运行段从设定值起继续累加。
+ */
+static MotorErr_t bdc_vnh_set_running_time(MotorHandle_t *motor,
+                                            uint32_t time_ms)
 {
-    MotorBDC_VNH_Private_t *priv = (MotorBDC_VNH_Private_t *)motor->priv;
+    MotorBDC_VNH_Private_t *priv =
+        (MotorBDC_VNH_Private_t *)motor->priv;
+    uint32_t now_ms;
+    MotorErr_t status;
 
-    if (priv->config.port->reset_position == NULL) {
-        return MOTOR_ERR_NOT_SUPPORTED;
+    status = priv->config.port->get_time_ms(priv->config.context, &now_ms);
+    if (status != MOTOR_OK) {
+        return status;
     }
-    return priv->config.port->reset_position(priv->config.context, position);
+
+    MotorRuntime_Set(&priv->runtime, time_ms, now_ms);
+    return MOTOR_OK;
 }
 
 /* 读取驱动层缓存的实际归一化输出值。 */
@@ -349,69 +383,20 @@ static MotorErr_t bdc_vnh_get_drive_direction(const MotorHandle_t *motor,
     return MOTOR_OK;
 }
 
-/* 根据可选的带符号实测速度换算方向；零速统一视为 Coast。 */
-static MotorErr_t bdc_vnh_get_measured_direction(const MotorHandle_t *motor,
-                                                  MotorDirection_t *direction)
+/* 读取累计运行时间（ms），运行中读取会实时结算当前运行段。 */
+static MotorErr_t bdc_vnh_get_running_time(const MotorHandle_t *motor,
+                                            uint32_t *time_ms)
 {
     const MotorBDC_VNH_Private_t *priv =
         (const MotorBDC_VNH_Private_t *)motor->priv;
-    float velocity;
+    uint32_t now_ms;
     MotorErr_t status;
 
-    if (priv->config.port->get_velocity == NULL) {
-        return MOTOR_ERR_NOT_SUPPORTED;
-    }
-
-    status = priv->config.port->get_velocity(priv->config.context, &velocity);
+    status = priv->config.port->get_time_ms(priv->config.context, &now_ms);
     if (status != MOTOR_OK) {
         return status;
     }
 
-    if (velocity > 0.0f) {
-        *direction = MOTOR_DIR_FORWARD;
-    } else if (velocity < 0.0f) {
-        *direction = MOTOR_DIR_BACKWARD;
-    } else {
-        *direction = MOTOR_DIR_COAST;
-    }
+    *time_ms = MotorRuntime_Get(&priv->runtime, now_ms);
     return MOTOR_OK;
-}
-
-/* 读取可选板级反馈中的原始位置计数。 */
-static MotorErr_t bdc_vnh_get_measured_position(const MotorHandle_t *motor,
-                                                 int32_t *position)
-{
-    const MotorBDC_VNH_Private_t *priv =
-        (const MotorBDC_VNH_Private_t *)motor->priv;
-
-    if (priv->config.port->get_position == NULL) {
-        return MOTOR_ERR_NOT_SUPPORTED;
-    }
-    return priv->config.port->get_position(priv->config.context, position);
-}
-
-/* 读取可选板级反馈中的带符号速度。 */
-static MotorErr_t bdc_vnh_get_measured_velocity(const MotorHandle_t *motor,
-                                                 float *velocity)
-{
-    const MotorBDC_VNH_Private_t *priv =
-        (const MotorBDC_VNH_Private_t *)motor->priv;
-
-    if (priv->config.port->get_velocity == NULL) {
-        return MOTOR_ERR_NOT_SUPPORTED;
-    }
-    return priv->config.port->get_velocity(priv->config.context, velocity);
-}
-
-/* 读取可选板级反馈中的已标定电流（单位：A）。 */
-static MotorErr_t bdc_vnh_get_measured_current(const MotorHandle_t *motor,
-                                                float *current)
-{
-    const MotorBDC_VNH_Private_t *priv =
-        (const MotorBDC_VNH_Private_t *)motor->priv;
-
-    if (priv->config.port->get_current == NULL) {
-        return MOTOR_ERR_NOT_SUPPORTED;
-    }
-    return priv->config.port->get_current(priv->config.context, current);
 }
