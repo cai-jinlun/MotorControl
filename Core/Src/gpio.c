@@ -60,8 +60,11 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, H3_INA_Pin|H3_INB_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, H4_INB_Pin|H4_INA_Pin|H5_INB_Pin|H5_INA_Pin
-                          |H_CS_Pin, GPIO_PIN_SET);
+  /* VNH 方向输入上电默认置低，H4/H5 在板级电机初始化前保持安全 Coast。 */
+  HAL_GPIO_WritePin(GPIOD, H4_INB_Pin|H4_INA_Pin|H5_INB_Pin|H5_INA_Pin,
+                          GPIO_PIN_RESET);
+
+  HAL_GPIO_WritePin(H_CS_GPIO_Port, H_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : KEY1_Pin KEY2_Pin KEY3_Pin */
   GPIO_InitStruct.Pin = KEY1_Pin|KEY2_Pin|KEY3_Pin;
