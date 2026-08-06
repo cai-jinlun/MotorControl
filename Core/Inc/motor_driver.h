@@ -27,6 +27,7 @@ typedef enum {
     MOTOR_ERR_HW_FAILURE = -5,        /* HAL/硬件错误 */
     MOTOR_ERR_NOT_SUPPORTED = -6,     /* 功能未实现 */
     MOTOR_ERR_ALREADY_INIT = -7,      /* 重复初始化 */
+    MOTOR_ERR_NOT_READY = -8,         /* 测量数据尚未准备完成 */
 } MotorErr_t;
 
 /* =====================================================================

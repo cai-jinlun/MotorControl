@@ -395,6 +395,11 @@
           <GroupName>Application/User/Core</GroupName>
           <Files>
             <File>
+              <FileName>board_motor_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/board_motor_link.c</FilePath>
+            </File>
+            <File>
               <FileName>quad_encoder.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/quad_encoder.c</FilePath>

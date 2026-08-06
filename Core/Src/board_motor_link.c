@@ -1,0 +1,397 @@
+#include "board_motor_link.h"
+
+#include "current_sense.h"
+#include "drv8714.h"
+#include "main.h"
+#include "motor_bdc_drv.h"
+#include "motor_bdc_vnh.h"
+#include "quad_encoder.h"
+#include "tim.h"
+
+#include <stddef.h>
+
+#define DOOR_CURRENT_OFFSET_COUNTS  2048.0f
+#define DOOR_CURRENT_AMPS_PER_COUNT 0.0201f
+#define BOARD_MOTOR_DEAD_ZONE        0U
+
+typedef struct {
+    TIM_HandleTypeDef *timer;
+    uint32_t           channel_a;
+    uint32_t           channel_b;
+} DoorMotorContext_t;
+
+typedef struct {
+    TIM_HandleTypeDef *timer;
+    uint32_t           channel;
+    GPIO_TypeDef      *in_a_port;
+    uint16_t           in_a_pin;
+    GPIO_TypeDef      *in_b_port;
+    uint16_t           in_b_pin;
+} VnhMotorContext_t;
+
+static MotorErr_t door_port_init(void *context);
+static MotorErr_t door_port_deinit(void *context);
+static MotorErr_t door_set_inputs(void *context, uint16_t in1, uint16_t in2);
+static MotorErr_t door_get_position(void *context, int32_t *position);
+static MotorErr_t door_reset_position(void *context, int32_t position);
+static MotorErr_t door_get_velocity(void *context, float *velocity);
+static MotorErr_t door_get_current(void *context, float *current);
+
+static MotorErr_t vnh_port_init(void *context);
+static MotorErr_t vnh_port_deinit(void *context);
+static MotorErr_t vnh_set_outputs(void *context,
+                                  uint8_t in_a,
+                                  uint8_t in_b,
+                                  uint16_t pwm);
+
+static const MotorBDC_DRV_PortOps_t s_door_port_ops = {
+    .init           = door_port_init,
+    .deinit         = door_port_deinit,
+    .set_inputs     = door_set_inputs,
+    .get_position   = door_get_position,
+    .reset_position = door_reset_position,
+    .get_velocity   = door_get_velocity,
+    .get_current    = door_get_current,
+};
+
+static const MotorBDC_VNH_PortOps_t s_vnh_port_ops = {
+    .init           = vnh_port_init,
+    .deinit         = vnh_port_deinit,
+    .set_outputs    = vnh_set_outputs,
+    .get_position   = NULL,
+    .reset_position = NULL,
+    .get_velocity   = NULL,
+    .get_current    = NULL,
+};
+
+static DoorMotorContext_t s_door_context = {
+    .timer     = &htim2,
+    .channel_a = TIM_CHANNEL_2, /* H1_PWM1 / DRV8714 IN1 */
+    .channel_b = TIM_CHANNEL_3, /* H1_PWM2 / DRV8714 IN2 */
+};
+
+static VnhMotorContext_t s_unlock_context = {
+    .timer     = &htim4,
+    .channel   = TIM_CHANNEL_1,
+    .in_a_port = H4_INA_GPIO_Port,
+    .in_a_pin  = H4_INA_Pin,
+    .in_b_port = H4_INB_GPIO_Port,
+    .in_b_pin  = H4_INB_Pin,
+};
+
+static VnhMotorContext_t s_cinch_context = {
+    .timer     = &htim4,
+    .channel   = TIM_CHANNEL_2,
+    .in_a_port = H5_INA_GPIO_Port,
+    .in_a_pin  = H5_INA_Pin,
+    .in_b_port = H5_INB_GPIO_Port,
+    .in_b_pin  = H5_INB_Pin,
+};
+
+static MotorHandle_t *s_door_motor;
+static MotorHandle_t *s_unlock_motor;
+static MotorHandle_t *s_cinch_motor;
+static uint8_t s_initialized;
+static uint8_t s_drv_module_registered;
+static uint8_t s_vnh_module_registered;
+
+/* 将通用电机输出 0~1000 映射到定时器实际 ARR，兼容不同 PWM 周期。 */
+static uint32_t output_to_compare(const TIM_HandleTypeDef *timer,
+                                  uint16_t output)
+{
+    uint32_t period;
+
+    if (output > MOTOR_OUTPUT_MAX) {
+        output = MOTOR_OUTPUT_MAX;
+    }
+
+    period = __HAL_TIM_GET_AUTORELOAD(timer);
+    return (uint32_t)((((uint64_t)output * (uint64_t)period) +
+                       (MOTOR_OUTPUT_MAX / 2U)) /
+                      MOTOR_OUTPUT_MAX);
+}
+
+static MotorErr_t current_status_to_motor_error(CurrentSenseStatus_t status)
+{
+    switch (status) {
+    case CURRENT_SENSE_OK:
+        return MOTOR_OK;
+    case CURRENT_SENSE_ERR_NULL_PTR:
+        return MOTOR_ERR_NULL_PTR;
+    case CURRENT_SENSE_ERR_NOT_STARTED:
+    case CURRENT_SENSE_ERR_NOT_CALIBRATED:
+        return MOTOR_ERR_NOT_INITIALIZED;
+    case CURRENT_SENSE_ERR_NOT_READY:
+        return MOTOR_ERR_NOT_READY;
+    case CURRENT_SENSE_ERR_INVALID_CALIBRATION:
+        return MOTOR_ERR_INVALID_PARAM;
+    case CURRENT_SENSE_ERR_HW_FAILURE:
+    default:
+        return MOTOR_ERR_HW_FAILURE;
+    }
+}
+
+static MotorErr_t door_port_init(void *context)
+{
+    DoorMotorContext_t *door = (DoorMotorContext_t *)context;
+    CurrentSenseStatus_t current_status;
+
+    if ((door == NULL) || (door->timer == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+
+    /* 先提交零占空比，再启动 PWM，避免使能 DRV8714 时产生意外脉冲。 */
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_a, 0U);
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_b, 0U);
+    if (HAL_TIM_PWM_Start(door->timer, door->channel_a) != HAL_OK) {
+        return MOTOR_ERR_HW_FAILURE;
+    }
+    if (HAL_TIM_PWM_Start(door->timer, door->channel_b) != HAL_OK) {
+        (void)HAL_TIM_PWM_Stop(door->timer, door->channel_a);
+        return MOTOR_ERR_HW_FAILURE;
+    }
+
+    DRV8714_DefaultHBridgeConfig();
+    QuadEncoder_Init();
+
+    current_status = CurrentSense_SetCalibration(
+        DOOR_CURRENT_OFFSET_COUNTS,
+        DOOR_CURRENT_AMPS_PER_COUNT);
+    if (current_status == CURRENT_SENSE_OK) {
+        current_status = CurrentSense_Start();
+    }
+    if (current_status != CURRENT_SENSE_OK) {
+        DRV8714_DisableDriver();
+        (void)HAL_TIM_PWM_Stop(door->timer, door->channel_b);
+        (void)HAL_TIM_PWM_Stop(door->timer, door->channel_a);
+        return current_status_to_motor_error(current_status);
+    }
+
+    return MOTOR_OK;
+}
+
+static MotorErr_t door_port_deinit(void *context)
+{
+    DoorMotorContext_t *door = (DoorMotorContext_t *)context;
+    HAL_StatusTypeDef status_a;
+    HAL_StatusTypeDef status_b;
+    CurrentSenseStatus_t current_status;
+
+    if ((door == NULL) || (door->timer == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_a, 0U);
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_b, 0U);
+    DRV8714_DisableDriver();
+    current_status = CurrentSense_Stop();
+    status_b = HAL_TIM_PWM_Stop(door->timer, door->channel_b);
+    status_a = HAL_TIM_PWM_Stop(door->timer, door->channel_a);
+
+    if ((current_status != CURRENT_SENSE_OK) &&
+        (current_status != CURRENT_SENSE_ERR_NOT_STARTED)) {
+        return current_status_to_motor_error(current_status);
+    }
+    return ((status_a == HAL_OK) && (status_b == HAL_OK))
+               ? MOTOR_OK
+               : MOTOR_ERR_HW_FAILURE;
+}
+
+static MotorErr_t door_set_inputs(void *context, uint16_t in1, uint16_t in2)
+{
+    DoorMotorContext_t *door = (DoorMotorContext_t *)context;
+
+    if ((door == NULL) || (door->timer == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    if ((in1 > MOTOR_OUTPUT_MAX) || (in2 > MOTOR_OUTPUT_MAX)) {
+        return MOTOR_ERR_INVALID_PARAM;
+    }
+
+    /* 换向前先清零双路比较值，降低瞬时桥臂冲突风险。 */
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_a, 0U);
+    __HAL_TIM_SET_COMPARE(door->timer, door->channel_b, 0U);
+    __HAL_TIM_SET_COMPARE(door->timer,
+                          door->channel_a,
+                          output_to_compare(door->timer, in1));
+    __HAL_TIM_SET_COMPARE(door->timer,
+                          door->channel_b,
+                          output_to_compare(door->timer, in2));
+    return MOTOR_OK;
+}
+
+static MotorErr_t door_get_position(void *context, int32_t *position)
+{
+    (void)context;
+    if (position == NULL) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    *position = QuadEncoder_GetCount();
+    return MOTOR_OK;
+}
+
+static MotorErr_t door_reset_position(void *context, int32_t position)
+{
+    (void)context;
+    QuadEncoder_SetCount(position);
+    return MOTOR_OK;
+}
+
+static MotorErr_t door_get_velocity(void *context, float *velocity)
+{
+    float magnitude;
+    int8_t direction;
+
+    (void)context;
+    if (velocity == NULL) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+
+    magnitude = QuadEncoder_GetVelocity();
+    direction = QuadEncoder_GetDirection();
+    *velocity = (direction < 0) ? -magnitude : magnitude;
+    return MOTOR_OK;
+}
+
+static MotorErr_t door_get_current(void *context, float *current)
+{
+    (void)context;
+    /* 板级电机接口只上传已换算为安培的平均电流。 */
+    return current_status_to_motor_error(CurrentSense_GetCurrent(current));
+}
+
+static MotorErr_t vnh_port_init(void *context)
+{
+    VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
+
+    if ((vnh == NULL) || (vnh->timer == NULL) ||
+        (vnh->in_a_port == NULL) || (vnh->in_b_port == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+
+    __HAL_TIM_SET_COMPARE(vnh->timer, vnh->channel, 0U);
+    HAL_GPIO_WritePin(vnh->in_a_port, vnh->in_a_pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(vnh->in_b_port, vnh->in_b_pin, GPIO_PIN_RESET);
+    return (HAL_TIM_PWM_Start(vnh->timer, vnh->channel) == HAL_OK)
+               ? MOTOR_OK
+               : MOTOR_ERR_HW_FAILURE;
+}
+
+static MotorErr_t vnh_port_deinit(void *context)
+{
+    VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
+
+    if ((vnh == NULL) || (vnh->timer == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+
+    __HAL_TIM_SET_COMPARE(vnh->timer, vnh->channel, 0U);
+    HAL_GPIO_WritePin(vnh->in_a_port, vnh->in_a_pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(vnh->in_b_port, vnh->in_b_pin, GPIO_PIN_RESET);
+    return (HAL_TIM_PWM_Stop(vnh->timer, vnh->channel) == HAL_OK)
+               ? MOTOR_OK
+               : MOTOR_ERR_HW_FAILURE;
+}
+
+static MotorErr_t vnh_set_outputs(void *context,
+                                  uint8_t in_a,
+                                  uint8_t in_b,
+                                  uint16_t pwm)
+{
+    VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
+
+    if ((vnh == NULL) || (vnh->timer == NULL)) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    if ((in_a > 1U) || (in_b > 1U) || (pwm > MOTOR_OUTPUT_MAX)) {
+        return MOTOR_ERR_INVALID_PARAM;
+    }
+
+    /* 切换 INA/INB 时先关闭 PWM，随后再恢复目标占空比。 */
+    __HAL_TIM_SET_COMPARE(vnh->timer, vnh->channel, 0U);
+    HAL_GPIO_WritePin(vnh->in_a_port,
+                      vnh->in_a_pin,
+                      (in_a != 0U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(vnh->in_b_port,
+                      vnh->in_b_pin,
+                      (in_b != 0U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    __HAL_TIM_SET_COMPARE(vnh->timer,
+                          vnh->channel,
+                          output_to_compare(vnh->timer, pwm));
+    return MOTOR_OK;
+}
+
+MotorErr_t BoardMotorLink_Init(void)
+{
+    MotorErr_t status;
+    MotorBDC_DRV_Config_t door_config;
+    MotorBDC_VNH_Config_t unlock_config;
+    MotorBDC_VNH_Config_t cinch_config;
+
+    if (s_initialized != 0U) {
+        return MOTOR_ERR_ALREADY_INIT;
+    }
+
+    if (s_drv_module_registered == 0U) {
+        status = MotorBDC_DRV_ModuleInit();
+        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
+            return status;
+        }
+        s_drv_module_registered = 1U;
+    }
+    if (s_vnh_module_registered == 0U) {
+        status = MotorBDC_VNH_ModuleInit();
+        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
+            return status;
+        }
+        s_vnh_module_registered = 1U;
+    }
+
+    door_config.port = &s_door_port_ops;
+    door_config.context = &s_door_context;
+    door_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
+    s_door_motor = MotorBDC_DRV_Create(&door_config);
+    if (s_door_motor == NULL) {
+        return MOTOR_ERR_HW_FAILURE;
+    }
+
+    unlock_config.port = &s_vnh_port_ops;
+    unlock_config.context = &s_unlock_context;
+    unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
+    s_unlock_motor = MotorBDC_VNH_Create(&unlock_config);
+    if (s_unlock_motor == NULL) {
+        MotorBDC_DRV_Destroy(s_door_motor);
+        s_door_motor = NULL;
+        return MOTOR_ERR_HW_FAILURE;
+    }
+
+    cinch_config.port = &s_vnh_port_ops;
+    cinch_config.context = &s_cinch_context;
+    cinch_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
+    s_cinch_motor = MotorBDC_VNH_Create(&cinch_config);
+    if (s_cinch_motor == NULL) {
+        MotorBDC_VNH_Destroy(s_unlock_motor);
+        MotorBDC_DRV_Destroy(s_door_motor);
+        s_unlock_motor = NULL;
+        s_door_motor = NULL;
+        return MOTOR_ERR_HW_FAILURE;
+    }
+
+    s_initialized = 1U;
+    return MOTOR_OK;
+}
+
+MotorHandle_t *BoardMotorLink_GetDoorMotor(void)
+{
+    return s_door_motor;
+}
+
+MotorHandle_t *BoardMotorLink_GetUnlockMotor(void)
+{
+    return s_unlock_motor;
+}
+
+MotorHandle_t *BoardMotorLink_GetCinchMotor(void)
+{
+    return s_cinch_motor;
+}

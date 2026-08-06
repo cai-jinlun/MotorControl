@@ -28,8 +28,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "quad_encoder.h"
-#include "drv8714.h"
+#include "board_motor_link.h"
 #include "current_sense.h"
 /* USER CODE END Includes */
 
@@ -103,9 +102,12 @@ int main(void)
   MX_TIM4_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  QuadEncoder_Init();  /* 启动 TIM1 CH1/CH2 输入捕获中断，开始软件正交解码 */
-  DRV8714_DefaultHBridgeConfig();  /* 默认 H 桥配置，可按实际拓扑修改 */
-  if (CurrentSense_Start() != CURRENT_SENSE_OK)
+  /*
+   * 初始化 H1 车门电机、H4 解锁电机和 H5 吸合电机。
+   * FreeRTOS TODO: 引入 RTOS 后，将该调用整体移入系统初始化任务，并确保
+   * 所有电机控制任务在初始化成功后才启动；下方 HAL 中断回调仍保留在 ISR。
+   */
+  if (BoardMotorLink_Init() != MOTOR_OK)
   {
     Error_Handler();
   }
