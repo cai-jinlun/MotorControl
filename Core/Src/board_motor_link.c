@@ -29,35 +29,35 @@ typedef struct {
     uint16_t           in_b_pin;
 } VnhMotorContext_t;
 
-static MotorErr_t door_port_init(void *context);
-static MotorErr_t door_port_deinit(void *context);
-static MotorErr_t door_set_inputs(void *context, uint16_t in1, uint16_t in2);
-static MotorErr_t door_get_position(void *context, int32_t *position);
-static MotorErr_t door_reset_position(void *context, int32_t position);
-static MotorErr_t door_get_velocity(void *context, float *velocity);
-static MotorErr_t door_get_current(void *context, float *current);
+static MotorErr_t door_drv_port_init(void *context);
+static MotorErr_t door_drv_port_deinit(void *context);
+static MotorErr_t door_drv_set_inputs(void *context, uint16_t in1, uint16_t in2);
+static MotorErr_t door_drv_get_position(void *context, int32_t *position);
+static MotorErr_t door_drv_reset_position(void *context, int32_t position);
+static MotorErr_t door_drv_get_velocity(void *context, float *velocity);
+static MotorErr_t door_drv_get_current(void *context, float *current);
 
-static MotorErr_t vnh_port_init(void *context);
-static MotorErr_t vnh_port_deinit(void *context);
-static MotorErr_t vnh_set_outputs(void *context,
-                                  uint8_t in_a,
-                                  uint8_t in_b,
-                                  uint16_t pwm);
+static MotorErr_t lock_vnh_port_init(void *context);
+static MotorErr_t lock_vnh_port_deinit(void *context);
+static MotorErr_t lock_vnh_set_outputs(void *context,
+                                       uint8_t in_a,
+                                       uint8_t in_b,
+                                       uint16_t pwm);
 
-static const MotorBDC_DRV_PortOps_t s_door_port_ops = {
-    .init           = door_port_init,
-    .deinit         = door_port_deinit,
-    .set_inputs     = door_set_inputs,
-    .get_position   = door_get_position,
-    .reset_position = door_reset_position,
-    .get_velocity   = door_get_velocity,
-    .get_current    = door_get_current,
+static const MotorBDC_DRV_PortOps_t s_door_drv_port_ops = {
+    .init           = door_drv_port_init,
+    .deinit         = door_drv_port_deinit,
+    .set_inputs     = door_drv_set_inputs,
+    .get_position   = door_drv_get_position,
+    .reset_position = door_drv_reset_position,
+    .get_velocity   = door_drv_get_velocity,
+    .get_current    = door_drv_get_current,
 };
 
-static const MotorBDC_VNH_PortOps_t s_vnh_port_ops = {
-    .init           = vnh_port_init,
-    .deinit         = vnh_port_deinit,
-    .set_outputs    = vnh_set_outputs,
+static const MotorBDC_VNH_PortOps_t s_lock_vnh_port_ops = {
+    .init           = lock_vnh_port_init,
+    .deinit         = lock_vnh_port_deinit,
+    .set_outputs    = lock_vnh_set_outputs,
     .get_position   = NULL,
     .reset_position = NULL,
     .get_velocity   = NULL,
@@ -131,7 +131,7 @@ static MotorErr_t current_status_to_motor_error(CurrentSenseStatus_t status)
     }
 }
 
-static MotorErr_t door_port_init(void *context)
+static MotorErr_t door_drv_port_init(void *context)
 {
     DoorMotorContext_t *door = (DoorMotorContext_t *)context;
     CurrentSenseStatus_t current_status;
@@ -170,7 +170,7 @@ static MotorErr_t door_port_init(void *context)
     return MOTOR_OK;
 }
 
-static MotorErr_t door_port_deinit(void *context)
+static MotorErr_t door_drv_port_deinit(void *context)
 {
     DoorMotorContext_t *door = (DoorMotorContext_t *)context;
     HAL_StatusTypeDef status_a;
@@ -197,7 +197,7 @@ static MotorErr_t door_port_deinit(void *context)
                : MOTOR_ERR_HW_FAILURE;
 }
 
-static MotorErr_t door_set_inputs(void *context, uint16_t in1, uint16_t in2)
+static MotorErr_t door_drv_set_inputs(void *context, uint16_t in1, uint16_t in2)
 {
     DoorMotorContext_t *door = (DoorMotorContext_t *)context;
 
@@ -220,7 +220,7 @@ static MotorErr_t door_set_inputs(void *context, uint16_t in1, uint16_t in2)
     return MOTOR_OK;
 }
 
-static MotorErr_t door_get_position(void *context, int32_t *position)
+static MotorErr_t door_drv_get_position(void *context, int32_t *position)
 {
     (void)context;
     if (position == NULL) {
@@ -230,14 +230,14 @@ static MotorErr_t door_get_position(void *context, int32_t *position)
     return MOTOR_OK;
 }
 
-static MotorErr_t door_reset_position(void *context, int32_t position)
+static MotorErr_t door_drv_reset_position(void *context, int32_t position)
 {
     (void)context;
     QuadEncoder_SetCount(position);
     return MOTOR_OK;
 }
 
-static MotorErr_t door_get_velocity(void *context, float *velocity)
+static MotorErr_t door_drv_get_velocity(void *context, float *velocity)
 {
     float magnitude;
     int8_t direction;
@@ -253,14 +253,14 @@ static MotorErr_t door_get_velocity(void *context, float *velocity)
     return MOTOR_OK;
 }
 
-static MotorErr_t door_get_current(void *context, float *current)
+static MotorErr_t door_drv_get_current(void *context, float *current)
 {
     (void)context;
     /* 板级电机接口只上传已换算为安培的平均电流。 */
     return current_status_to_motor_error(CurrentSense_GetCurrent(current));
 }
 
-static MotorErr_t vnh_port_init(void *context)
+static MotorErr_t lock_vnh_port_init(void *context)
 {
     VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
 
@@ -277,7 +277,7 @@ static MotorErr_t vnh_port_init(void *context)
                : MOTOR_ERR_HW_FAILURE;
 }
 
-static MotorErr_t vnh_port_deinit(void *context)
+static MotorErr_t lock_vnh_port_deinit(void *context)
 {
     VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
 
@@ -293,10 +293,10 @@ static MotorErr_t vnh_port_deinit(void *context)
                : MOTOR_ERR_HW_FAILURE;
 }
 
-static MotorErr_t vnh_set_outputs(void *context,
-                                  uint8_t in_a,
-                                  uint8_t in_b,
-                                  uint16_t pwm)
+static MotorErr_t lock_vnh_set_outputs(void *context,
+                                       uint8_t in_a,
+                                       uint8_t in_b,
+                                       uint16_t pwm)
 {
     VnhMotorContext_t *vnh = (VnhMotorContext_t *)context;
 
@@ -347,7 +347,7 @@ MotorErr_t BoardMotorLink_Init(void)
         s_vnh_module_registered = 1U;
     }
 
-    door_config.port = &s_door_port_ops;
+    door_config.port = &s_door_drv_port_ops;
     door_config.context = &s_door_context;
     door_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_door_motor = MotorBDC_DRV_Create(&door_config);
@@ -355,7 +355,7 @@ MotorErr_t BoardMotorLink_Init(void)
         return MOTOR_ERR_HW_FAILURE;
     }
 
-    unlock_config.port = &s_vnh_port_ops;
+    unlock_config.port = &s_lock_vnh_port_ops;
     unlock_config.context = &s_unlock_context;
     unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_unlock_motor = MotorBDC_VNH_Create(&unlock_config);
@@ -365,7 +365,7 @@ MotorErr_t BoardMotorLink_Init(void)
         return MOTOR_ERR_HW_FAILURE;
     }
 
-    cinch_config.port = &s_vnh_port_ops;
+    cinch_config.port = &s_lock_vnh_port_ops;
     cinch_config.context = &s_cinch_context;
     cinch_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_cinch_motor = MotorBDC_VNH_Create(&cinch_config);
