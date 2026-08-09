@@ -168,12 +168,26 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
 }
 
 /* 从静态池创建实例、复制配置并自动进入已初始化的 Coast 状态。 */
-MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
+MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg,
+                                   MotorErr_t *error)
 {
     MotorBDC_DRV_Instance_t *instance;
+    MotorErr_t status;
     uint32_t index;
 
+    if (error != NULL) {
+        *error = MOTOR_OK;
+    }
+    if (cfg == NULL) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_NULL_PTR;
+        }
+        return NULL;
+    }
     if (bdc_drv_config_valid(cfg) == 0U) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_INVALID_PARAM;
+        }
         return NULL;
     }
 
@@ -183,6 +197,9 @@ MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
         }
     }
     if (index >= MOTOR_BDC_DRV_INSTANCE_COUNT) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_NO_RESOURCE;
+        }
         return NULL;
     }
 
@@ -197,9 +214,13 @@ MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
     instance->priv.config = *cfg;
     instance->priv.direction = MOTOR_DIR_COAST;
 
-    if (Motor_Init(&instance->base) != MOTOR_OK) {
+    status = Motor_Init(&instance->base);
+    if (status != MOTOR_OK) {
         s_instance_map &= ~(1UL << index);
         memset(instance, 0, sizeof(*instance));
+        if (error != NULL) {
+            *error = status;
+        }
         return NULL;
     }
 

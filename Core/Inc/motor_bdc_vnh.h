@@ -57,8 +57,12 @@ typedef struct {
     uint16_t                      dead_zone;
 } MotorBDC_VNH_Config_t;
 
-/* 创建会复制配置并自动完成 Motor_Init；失败返回 NULL。 */
-MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg);
+/*
+ * 创建会复制配置并自动完成 Motor_Init；失败返回 NULL。
+ * error 可为 NULL；非 NULL 时返回成功状态或具体失败原因。
+ */
+MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg,
+                                   MotorErr_t *error);
 
 /* 仅销毁由 MotorBDC_VNH_Create 返回且尚未销毁的有效实例。 */
 void MotorBDC_VNH_Destroy(MotorHandle_t *handle);

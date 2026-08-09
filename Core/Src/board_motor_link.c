@@ -327,6 +327,7 @@ static MotorErr_t lock_vnh_set_outputs(void *context,
 
 MotorErr_t BoardMotorLink_Init(void)
 {
+    MotorErr_t status;
     MotorBDC_DRV_Config_t door_config;
     MotorBDC_VNH_Config_t unlock_config;
     MotorBDC_VNH_Config_t cinch_config;
@@ -338,31 +339,31 @@ MotorErr_t BoardMotorLink_Init(void)
     door_config.port = &s_door_drv_port_ops;
     door_config.context = &s_door_context;
     door_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_door_motor = MotorBDC_DRV_Create(&door_config);
+    s_door_motor = MotorBDC_DRV_Create(&door_config, &status);
     if (s_door_motor == NULL) {
-        return MOTOR_ERR_HW_FAILURE;
+        return status;
     }
 
     unlock_config.port = &s_lock_vnh_port_ops;
     unlock_config.context = &s_unlock_context;
     unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_unlock_motor = MotorBDC_VNH_Create(&unlock_config);
+    s_unlock_motor = MotorBDC_VNH_Create(&unlock_config, &status);
     if (s_unlock_motor == NULL) {
         MotorBDC_DRV_Destroy(s_door_motor);
         s_door_motor = NULL;
-        return MOTOR_ERR_HW_FAILURE;
+        return status;
     }
 
     cinch_config.port = &s_lock_vnh_port_ops;
     cinch_config.context = &s_cinch_context;
     cinch_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_cinch_motor = MotorBDC_VNH_Create(&cinch_config);
+    s_cinch_motor = MotorBDC_VNH_Create(&cinch_config, &status);
     if (s_cinch_motor == NULL) {
         MotorBDC_VNH_Destroy(s_unlock_motor);
         MotorBDC_DRV_Destroy(s_door_motor);
         s_unlock_motor = NULL;
         s_door_motor = NULL;
-        return MOTOR_ERR_HW_FAILURE;
+        return status;
     }
 
     s_initialized = 1U;
