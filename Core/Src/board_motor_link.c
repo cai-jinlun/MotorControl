@@ -325,8 +325,45 @@ static MotorErr_t lock_vnh_set_outputs(void *context,
     return MOTOR_OK;
 }
 
+/* 逆序销毁已创建的实例；失败的句柄保留以便下次重试。 */
+static MotorErr_t board_motor_link_cleanup_instances(void)
+{
+    MotorErr_t first_error = MOTOR_OK;
+    MotorErr_t status;
+
+    if (s_cinch_motor != NULL) {
+        status = MotorBDC_VNH_Destroy(s_cinch_motor);
+        if (status == MOTOR_OK) {
+            s_cinch_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    if (s_unlock_motor != NULL) {
+        status = MotorBDC_VNH_Destroy(s_unlock_motor);
+        if (status == MOTOR_OK) {
+            s_unlock_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    if (s_door_motor != NULL) {
+        status = MotorBDC_DRV_Destroy(s_door_motor);
+        if (status == MOTOR_OK) {
+            s_door_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    return first_error;
+}
+
 MotorErr_t BoardMotorLink_Init(void)
 {
+    MotorErr_t cleanup_status;
     MotorErr_t status;
     MotorBDC_DRV_Config_t door_config;
     MotorBDC_VNH_Config_t unlock_config;
@@ -334,6 +371,12 @@ MotorErr_t BoardMotorLink_Init(void)
 
     if (s_initialized != 0U) {
         return MOTOR_ERR_ALREADY_INIT;
+    }
+
+    /* 先重试收敛上次初始化失败遗留的实例，禁止覆盖有效句柄。 */
+    cleanup_status = board_motor_link_cleanup_instances();
+    if (cleanup_status != MOTOR_OK) {
+        return cleanup_status;
     }
 
     door_config.port = &s_door_drv_port_ops;
@@ -349,9 +392,8 @@ MotorErr_t BoardMotorLink_Init(void)
     unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_unlock_motor = MotorBDC_VNH_Create(&unlock_config, &status);
     if (s_unlock_motor == NULL) {
-        MotorBDC_DRV_Destroy(s_door_motor);
-        s_door_motor = NULL;
-        return status;
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
 
     cinch_config.port = &s_lock_vnh_port_ops;
@@ -359,11 +401,8 @@ MotorErr_t BoardMotorLink_Init(void)
     cinch_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_cinch_motor = MotorBDC_VNH_Create(&cinch_config, &status);
     if (s_cinch_motor == NULL) {
-        MotorBDC_VNH_Destroy(s_unlock_motor);
-        MotorBDC_DRV_Destroy(s_door_motor);
-        s_unlock_motor = NULL;
-        s_door_motor = NULL;
-        return status;
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
 
     s_initialized = 1U;
