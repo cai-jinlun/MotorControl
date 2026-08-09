@@ -1,23 +1,6 @@
 #include "motor_driver.h"
 #include <string.h>
 
-/* 操作表注册中心 */
-static const MotorOps_t *g_ops_registry[MOTOR_TYPE_MAX] = {NULL};
-
-/* ------------------------------------------------------------------ */
-MotorErr_t Motor_RegisterOps(MotorType_t type, const MotorOps_t *ops)
-{
-    if(ops == NULL) return MOTOR_ERR_NULL_PTR;
-    if (type >= MOTOR_TYPE_MAX ) {
-        return MOTOR_ERR_INVALID_PARAM;
-    }
-    if (g_ops_registry[type] != NULL) {
-        return MOTOR_ERR_ALREADY_INIT;   /* 防止重复注册 */
-    }
-    g_ops_registry[type] = ops;
-    return MOTOR_OK;
-}
-
 /* ------------------------------------------------------------------ */
 MotorErr_t Motor_Init(MotorHandle_t *motor)
 {
@@ -58,7 +41,7 @@ MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output)
     if (motor->ops == NULL || motor->ops->setOutput == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
-    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
+    output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
     return motor->ops->setOutput(motor, output);
 }
@@ -74,7 +57,7 @@ MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor, MotorDirection_t dir, int16_
     if (dir >= MOTOR_DIR_MAX) {
         return MOTOR_ERR_INVALID_PARAM;
     }
-    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
+    output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
     return motor->ops->setDirOutput(motor, dir, output);
 }

@@ -14,7 +14,6 @@ typedef struct {
     int16_t               output;
     MotorDirection_t      direction;
     uint8_t               init_called;
-    uint8_t               deinit_called;
 } MotorBDC_DRV_Private_t;
 
 typedef struct {
@@ -107,6 +106,7 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     uint16_t in1 = 0U;
     uint16_t in2 = 0U;
     int16_t applied_output = output;
+    MotorDirection_t applied_direction = direction;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -117,11 +117,6 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     }
 
     priv = (MotorBDC_DRV_Private_t *)motor->priv;
-    if (applied_output < MOTOR_OUTPUT_MIN) {
-        applied_output = MOTOR_OUTPUT_MIN;
-    } else if (applied_output > MOTOR_OUTPUT_MAX) {
-        applied_output = MOTOR_OUTPUT_MAX;
-    }
 
     switch (direction) {
     case MOTOR_DIR_FORWARD:
@@ -152,9 +147,14 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
         return MOTOR_ERR_INVALID_PARAM;
     }
 
+    /* 死区或零输出最终提交 IN1=0、IN2=0，物理状态为 Coast。 */
+    if ((in1 == 0U) && (in2 == 0U)) {
+        applied_direction = MOTOR_DIR_COAST;
+    }
+
     status = priv->config.port->set_inputs(priv->config.context, in1, in2);
     if (status == MOTOR_OK) {
-        priv->direction = direction;
+        priv->direction = applied_direction;
         priv->output = applied_output;
         return MOTOR_OK;
     }
@@ -167,19 +167,27 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     return status;
 }
 
-/* 向通用电机框架注册 BDC_DRV 的操作表。 */
-MotorErr_t MotorBDC_DRV_ModuleInit(void)
-{
-    return Motor_RegisterOps(MOTOR_TYPE_BDC_DRV, &s_bdc_drv_ops);
-}
-
 /* 从静态池创建实例、复制配置并自动进入已初始化的 Coast 状态。 */
-MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
+MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg,
+                                   MotorErr_t *error)
 {
     MotorBDC_DRV_Instance_t *instance;
+    MotorErr_t status;
     uint32_t index;
 
+    if (error != NULL) {
+        *error = MOTOR_OK;
+    }
+    if (cfg == NULL) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_NULL_PTR;
+        }
+        return NULL;
+    }
     if (bdc_drv_config_valid(cfg) == 0U) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_INVALID_PARAM;
+        }
         return NULL;
     }
 
@@ -189,6 +197,9 @@ MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
         }
     }
     if (index >= MOTOR_BDC_DRV_INSTANCE_COUNT) {
+        if (error != NULL) {
+            *error = MOTOR_ERR_NO_RESOURCE;
+        }
         return NULL;
     }
 
@@ -196,46 +207,58 @@ MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
     instance = &s_instance_pool[index];
     memset(instance, 0, sizeof(*instance));
 
-    instance->base.id = (uint8_t)index;
     instance->base.type = MOTOR_TYPE_BDC_DRV;
     instance->base.ops = &s_bdc_drv_ops;
     instance->base.priv = &instance->priv;
     instance->priv.config = *cfg;
     instance->priv.direction = MOTOR_DIR_COAST;
 
-    if (Motor_Init(&instance->base) != MOTOR_OK) {
+    status = Motor_Init(&instance->base);
+    if (status != MOTOR_OK) {
         s_instance_map &= ~(1UL << index);
         memset(instance, 0, sizeof(*instance));
+        if (error != NULL) {
+            *error = status;
+        }
         return NULL;
     }
 
     return &instance->base;
 }
 
-/* 销毁有效实例：先执行一次反初始化，再释放静态池槽位。 */
-void MotorBDC_DRV_Destroy(MotorHandle_t *handle)
+/* 销毁有效实例：只有安全反初始化成功后才释放静态池槽位。 */
+MotorErr_t MotorBDC_DRV_Destroy(MotorHandle_t *handle)
 {
-    int32_t index = bdc_drv_find_instance(handle);
+    int32_t index;
     MotorBDC_DRV_Instance_t *instance;
+    MotorErr_t status;
 
+    if (handle == NULL) {
+        return MOTOR_ERR_NULL_PTR;
+    }
+    index = bdc_drv_find_instance(handle);
     if (index < 0) {
-        return;
+        return MOTOR_ERR_INVALID_PARAM;
     }
 
     instance = &s_instance_pool[(uint32_t)index];
     if (instance->base.is_initialized != 0U) {
-        /* Motor_Deinit 内部只会调用一次端口 deinit。 */
-        (void)Motor_Deinit(&instance->base);
+        status = Motor_Deinit(&instance->base);
+        if (status != MOTOR_OK) {
+            return status;
+        }
     }
 
     s_instance_map &= ~(1UL << (uint32_t)index);
     memset(instance, 0, sizeof(*instance));
+    return MOTOR_OK;
 }
 
 /* 调用板级 init 并提交初始 Coast；失败时按生命周期约定回滚。 */
 static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
 {
     MotorBDC_DRV_Private_t *priv;
+    MotorErr_t rollback_status;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -243,7 +266,7 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     }
     priv = (MotorBDC_DRV_Private_t *)motor->priv;
 
-    /* 一个实例的完整生命周期中，板级 init 最多调用一次。 */
+    /* 同一个初始化周期中，板级 init 最多调用一次。 */
     if (priv->init_called != 0U) {
         return MOTOR_ERR_ALREADY_INIT;
     }
@@ -252,14 +275,17 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     status = priv->config.port->init(priv->config.context);
     if (status != MOTOR_OK) {
         /* init 失败的内部回滚完全由板级 init 负责。 */
+        priv->init_called = 0U;
         return status;
     }
 
     status = priv->config.port->set_inputs(priv->config.context, 0U, 0U);
     if (status != MOTOR_OK) {
         /* init 已成功，必须用恰好一次 deinit 平衡其资源引用。 */
-        priv->deinit_called = 1U;
-        (void)priv->config.port->deinit(priv->config.context);
+        rollback_status = priv->config.port->deinit(priv->config.context);
+        if (rollback_status == MOTOR_OK) {
+            priv->init_called = 0U;
+        }
         return status;
     }
 
@@ -268,7 +294,7 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     return MOTOR_OK;
 }
 
-/* 先请求 Coast，再仅一次调用板级 deinit 释放资源引用。 */
+/* 先请求 Coast，再用可重试的板级 deinit 强制关断并释放资源。 */
 static MotorErr_t bdc_drv_deinit(MotorHandle_t *motor)
 {
     MotorBDC_DRV_Private_t *priv;
@@ -280,18 +306,22 @@ static MotorErr_t bdc_drv_deinit(MotorHandle_t *motor)
     }
     priv = (MotorBDC_DRV_Private_t *)motor->priv;
 
-    /* 即使上一次 deinit 报错，也禁止再次释放同一份板级引用。 */
-    if (priv->deinit_called != 0U) {
-        return MOTOR_OK;
+    coast_status = priv->config.port->set_inputs(priv->config.context, 0U, 0U);
+    deinit_status = priv->config.port->deinit(priv->config.context);
+
+    if (deinit_status != MOTOR_OK) {
+        if (coast_status == MOTOR_OK) {
+            priv->direction = MOTOR_DIR_COAST;
+            priv->output = 0;
+        }
+        return deinit_status;
     }
 
-    coast_status = priv->config.port->set_inputs(priv->config.context, 0U, 0U);
-    priv->deinit_called = 1U;
-    deinit_status = priv->config.port->deinit(priv->config.context);
+    /* 板级 deinit 已确认强制关断，因此即使前置 Coast 失败也视为成功。 */
     priv->direction = MOTOR_DIR_COAST;
     priv->output = 0;
-
-    return (coast_status != MOTOR_OK) ? coast_status : deinit_status;
+    priv->init_called = 0U;
+    return MOTOR_OK;
 }
 
 /* 保持当前方向，仅更新当前方向对应的 PWM 输出。 */

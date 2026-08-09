@@ -12,14 +12,14 @@ extern "C" {
  * motor_bdc_drv 与具体 MCU/板卡之间的连接接口。
  *
  * 生命周期约定：
- * 1. 每个成功创建的电机实例只调用一次 init。
- * 2. 每次有效销毁只调用一次 deinit；板级层可在其中实现引用计数。
+ * 1. 每个初始化周期只调用一次 init；成功 deinit 后可再次 init。
+ * 2. 每个成功 init 必须由一次成功 deinit 平衡；板级层可实现引用计数。
  * 3. init 返回失败时，必须由 init 自行回滚已启动的板级资源；驱动层
  *    不会再调用 deinit 拆解这些资源。
  * 4. init 成功后若驱动的后续初始化失败，驱动会调用一次 deinit，以平衡
  *    已成功的 init。
- * 5. deinit 即使返回失败，驱动也不会再次调用它；板级 deinit 应在单次调用
- *    内完成引用计数扣减和必要的错误收敛。
+ * 5. deinit 失败后可能被重试，因此必须可安全重复调用；仅在已强制进入
+ *    安全输出状态并完成资源释放后返回 MOTOR_OK。
  */
 typedef struct {
     /* 初始化本电机实例所需的板级资源，可在内部执行引用计数加一。 */
@@ -52,14 +52,15 @@ typedef struct {
     uint16_t                      dead_zone;
 } MotorBDC_DRV_Config_t;
 
-/* 将 MOTOR_TYPE_BDC_DRV 操作表注册到通用电机层；系统启动时调用一次。 */
-MotorErr_t MotorBDC_DRV_ModuleInit(void);
+/*
+ * 创建会自动完成 Motor_Init；失败返回 NULL。配置内容会被复制到实例中。
+ * error 可为 NULL；非 NULL 时返回成功状态或具体失败原因。
+ */
+MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg,
+                                   MotorErr_t *error);
 
-/* 创建会自动完成 Motor_Init；失败返回 NULL。配置内容会被复制到实例中。 */
-MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg);
-
-/* 仅销毁由 MotorBDC_DRV_Create 返回且尚未销毁的有效实例。 */
-void MotorBDC_DRV_Destroy(MotorHandle_t *handle);
+/* 仅销毁有效实例；关断失败时返回错误并保留句柄以便重试。 */
+MotorErr_t MotorBDC_DRV_Destroy(MotorHandle_t *handle);
 
 #ifdef __cplusplus
 }

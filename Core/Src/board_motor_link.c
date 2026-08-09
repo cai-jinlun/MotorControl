@@ -92,23 +92,27 @@ static MotorHandle_t *s_door_motor;
 static MotorHandle_t *s_unlock_motor;
 static MotorHandle_t *s_cinch_motor;
 static uint8_t s_initialized;
-static uint8_t s_drv_module_registered;
-static uint8_t s_vnh_module_registered;
 
-/* 将通用电机输出 0~1000 映射到定时器实际 ARR，兼容不同 PWM 周期。 */
+/*
+ * 将通用电机输出 0~1000 映射到定时器比较值。
+ * PWM 模式 1 需要 CCR > ARR 才能保持 100% 占空比，因此按 ARR + 1 个计数刻度换算。
+ */
 static uint32_t output_to_compare(const TIM_HandleTypeDef *timer,
                                   uint16_t output)
 {
-    uint32_t period;
+    uint64_t period_counts;
+    uint64_t compare;
 
     if (output > MOTOR_OUTPUT_MAX) {
         output = MOTOR_OUTPUT_MAX;
     }
 
-    period = __HAL_TIM_GET_AUTORELOAD(timer);
-    return (uint32_t)((((uint64_t)output * (uint64_t)period) +
-                       (MOTOR_OUTPUT_MAX / 2U)) /
-                      MOTOR_OUTPUT_MAX);
+    period_counts = (uint64_t)__HAL_TIM_GET_AUTORELOAD(timer) + 1U;
+    compare = (((uint64_t)output * period_counts) +
+               (MOTOR_OUTPUT_MAX / 2U)) /
+              MOTOR_OUTPUT_MAX;
+
+    return (compare > UINT32_MAX) ? UINT32_MAX : (uint32_t)compare;
 }
 
 static MotorErr_t current_status_to_motor_error(CurrentSenseStatus_t status)
@@ -321,8 +325,45 @@ static MotorErr_t lock_vnh_set_outputs(void *context,
     return MOTOR_OK;
 }
 
+/* 逆序销毁已创建的实例；失败的句柄保留以便下次重试。 */
+static MotorErr_t board_motor_link_cleanup_instances(void)
+{
+    MotorErr_t first_error = MOTOR_OK;
+    MotorErr_t status;
+
+    if (s_cinch_motor != NULL) {
+        status = MotorBDC_VNH_Destroy(s_cinch_motor);
+        if (status == MOTOR_OK) {
+            s_cinch_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    if (s_unlock_motor != NULL) {
+        status = MotorBDC_VNH_Destroy(s_unlock_motor);
+        if (status == MOTOR_OK) {
+            s_unlock_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    if (s_door_motor != NULL) {
+        status = MotorBDC_DRV_Destroy(s_door_motor);
+        if (status == MOTOR_OK) {
+            s_door_motor = NULL;
+        } else if (first_error == MOTOR_OK) {
+            first_error = status;
+        }
+    }
+
+    return first_error;
+}
+
 MotorErr_t BoardMotorLink_Init(void)
 {
+    MotorErr_t cleanup_status;
     MotorErr_t status;
     MotorBDC_DRV_Config_t door_config;
     MotorBDC_VNH_Config_t unlock_config;
@@ -332,49 +373,36 @@ MotorErr_t BoardMotorLink_Init(void)
         return MOTOR_ERR_ALREADY_INIT;
     }
 
-    if (s_drv_module_registered == 0U) {
-        status = MotorBDC_DRV_ModuleInit();
-        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
-            return status;
-        }
-        s_drv_module_registered = 1U;
-    }
-    if (s_vnh_module_registered == 0U) {
-        status = MotorBDC_VNH_ModuleInit();
-        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
-            return status;
-        }
-        s_vnh_module_registered = 1U;
+    /* 先重试收敛上次初始化失败遗留的实例，禁止覆盖有效句柄。 */
+    cleanup_status = board_motor_link_cleanup_instances();
+    if (cleanup_status != MOTOR_OK) {
+        return cleanup_status;
     }
 
     door_config.port = &s_door_drv_port_ops;
     door_config.context = &s_door_context;
     door_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_door_motor = MotorBDC_DRV_Create(&door_config);
+    s_door_motor = MotorBDC_DRV_Create(&door_config, &status);
     if (s_door_motor == NULL) {
-        return MOTOR_ERR_HW_FAILURE;
+        return status;
     }
 
     unlock_config.port = &s_lock_vnh_port_ops;
     unlock_config.context = &s_unlock_context;
     unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_unlock_motor = MotorBDC_VNH_Create(&unlock_config);
+    s_unlock_motor = MotorBDC_VNH_Create(&unlock_config, &status);
     if (s_unlock_motor == NULL) {
-        MotorBDC_DRV_Destroy(s_door_motor);
-        s_door_motor = NULL;
-        return MOTOR_ERR_HW_FAILURE;
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
 
     cinch_config.port = &s_lock_vnh_port_ops;
     cinch_config.context = &s_cinch_context;
     cinch_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
-    s_cinch_motor = MotorBDC_VNH_Create(&cinch_config);
+    s_cinch_motor = MotorBDC_VNH_Create(&cinch_config, &status);
     if (s_cinch_motor == NULL) {
-        MotorBDC_VNH_Destroy(s_unlock_motor);
-        MotorBDC_DRV_Destroy(s_door_motor);
-        s_unlock_motor = NULL;
-        s_door_motor = NULL;
-        return MOTOR_ERR_HW_FAILURE;
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
 
     s_initialized = 1U;

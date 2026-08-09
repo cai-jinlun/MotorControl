@@ -13,7 +13,19 @@ extern "C" {
  * ===================================================================== */
 #define MOTOR_OUTPUT_MAX  1000
 #define MOTOR_OUTPUT_MIN  0
-#define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
+
+static inline int16_t Motor_Clamp(int16_t value,
+                                  int16_t min_value,
+                                  int16_t max_value)
+{
+    if (value < min_value) {
+        return min_value;
+    }
+    if (value > max_value) {
+        return max_value;
+    }
+    return value;
+}
 
 /* =====================================================================
  * 错误码
@@ -59,6 +71,7 @@ struct MotorHandle;   /* 前向声明 */
 typedef struct {
     MotorErr_t (*init)(struct MotorHandle *motor);
     MotorErr_t (*deinit)(struct MotorHandle *motor);
+    /* 以下输出回调的 output 已由通用层限制在 MOTOR_OUTPUT_MIN..MOTOR_OUTPUT_MAX。 */
     MotorErr_t (*setOutput)(struct MotorHandle *motor, int16_t output);
     MotorErr_t (*setDirOutput)(struct MotorHandle *motor, MotorDirection_t dir, int16_t output);
     MotorErr_t (*resetPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置设置，主要为重置位置 */
@@ -78,7 +91,6 @@ typedef struct {
  * 电机句柄（基类）
  * ===================================================================== */
 typedef struct MotorHandle {
-    uint8_t           id;              /* 实例编号 */
     MotorType_t       type;            /* 电机类型 */
     uint8_t           is_initialized;  /* 初始化标志 */
     const MotorOps_t *ops;             /* 操作表（只读） */
@@ -88,8 +100,6 @@ typedef struct MotorHandle {
 /* =====================================================================
  * 统一API（上层业务只调用这些）
  * ===================================================================== */
-MotorErr_t Motor_RegisterOps(MotorType_t type, const MotorOps_t *ops);
-
 MotorErr_t Motor_Init(MotorHandle_t *motor);
 MotorErr_t Motor_Deinit(MotorHandle_t *motor);
 
