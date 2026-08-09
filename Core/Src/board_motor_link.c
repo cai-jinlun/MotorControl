@@ -93,20 +93,26 @@ static MotorHandle_t *s_unlock_motor;
 static MotorHandle_t *s_cinch_motor;
 static uint8_t s_initialized;
 
-/* 将通用电机输出 0~1000 映射到定时器实际 ARR，兼容不同 PWM 周期。 */
+/*
+ * 将通用电机输出 0~1000 映射到定时器比较值。
+ * PWM 模式 1 需要 CCR > ARR 才能保持 100% 占空比，因此按 ARR + 1 个计数刻度换算。
+ */
 static uint32_t output_to_compare(const TIM_HandleTypeDef *timer,
                                   uint16_t output)
 {
-    uint32_t period;
+    uint64_t period_counts;
+    uint64_t compare;
 
     if (output > MOTOR_OUTPUT_MAX) {
         output = MOTOR_OUTPUT_MAX;
     }
 
-    period = __HAL_TIM_GET_AUTORELOAD(timer);
-    return (uint32_t)((((uint64_t)output * (uint64_t)period) +
-                       (MOTOR_OUTPUT_MAX / 2U)) /
-                      MOTOR_OUTPUT_MAX);
+    period_counts = (uint64_t)__HAL_TIM_GET_AUTORELOAD(timer) + 1U;
+    compare = (((uint64_t)output * period_counts) +
+               (MOTOR_OUTPUT_MAX / 2U)) /
+              MOTOR_OUTPUT_MAX;
+
+    return (compare > UINT32_MAX) ? UINT32_MAX : (uint32_t)compare;
 }
 
 static MotorErr_t current_status_to_motor_error(CurrentSenseStatus_t status)
