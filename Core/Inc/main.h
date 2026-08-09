@@ -57,11 +57,17 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define KEY1_Pin GPIO_PIN_1
+#define HALF_Pin GPIO_PIN_1
+#define HALF_GPIO_Port GPIOF
+#define FULL_Pin GPIO_PIN_2
+#define FULL_GPIO_Port GPIOF
+#define CENTRAL_Pin GPIO_PIN_3
+#define CENTRAL_GPIO_Port GPIOF
+#define KEY1_Pin GPIO_PIN_13
 #define KEY1_GPIO_Port GPIOF
-#define KEY2_Pin GPIO_PIN_2
+#define KEY2_Pin GPIO_PIN_14
 #define KEY2_GPIO_Port GPIOF
-#define KEY3_Pin GPIO_PIN_3
+#define KEY3_Pin GPIO_PIN_15
 #define KEY3_GPIO_Port GPIOF
 #define H1_Hall_A_Pin GPIO_PIN_9
 #define H1_Hall_A_GPIO_Port GPIOE

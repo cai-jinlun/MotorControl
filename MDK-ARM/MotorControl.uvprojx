@@ -425,6 +425,11 @@
               <FilePath>../Core/Src/current_sense.c</FilePath>
             </File>
             <File>
+              <FileName>motor_bdc_drv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\motor_bdc_drv.c</FilePath>
+            </File>
+            <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/main.c</FilePath>
@@ -580,11 +585,6 @@
               <FileName>stm32f4xx_hal_timebase_tim.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f4xx_hal_timebase_tim.c</FilePath>
-            </File>
-            <File>
-              <FileName>motor_bdc_drv.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Core\Src\motor_bdc_drv.c</FilePath>
             </File>
           </Files>
         </Group>

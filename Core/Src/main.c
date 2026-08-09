@@ -30,6 +30,7 @@
 /* USER CODE BEGIN Includes */
 #include "board_motor_link.h"
 #include "current_sense.h"
+#include "quad_encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
