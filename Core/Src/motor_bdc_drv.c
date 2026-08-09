@@ -257,6 +257,7 @@ void MotorBDC_DRV_Destroy(MotorHandle_t *handle)
 static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
 {
     MotorBDC_DRV_Private_t *priv;
+    MotorErr_t rollback_status;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -264,7 +265,7 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     }
     priv = (MotorBDC_DRV_Private_t *)motor->priv;
 
-    /* 一个实例的完整生命周期中，板级 init 最多调用一次。 */
+    /* 同一个初始化周期中，板级 init 最多调用一次。 */
     if (priv->init_called != 0U) {
         return MOTOR_ERR_ALREADY_INIT;
     }
@@ -273,6 +274,7 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     status = priv->config.port->init(priv->config.context);
     if (status != MOTOR_OK) {
         /* init 失败的内部回滚完全由板级 init 负责。 */
+        priv->init_called = 0U;
         return status;
     }
 
@@ -280,7 +282,11 @@ static MotorErr_t bdc_drv_init(MotorHandle_t *motor)
     if (status != MOTOR_OK) {
         /* init 已成功，必须用恰好一次 deinit 平衡其资源引用。 */
         priv->deinit_called = 1U;
-        (void)priv->config.port->deinit(priv->config.context);
+        rollback_status = priv->config.port->deinit(priv->config.context);
+        if (rollback_status == MOTOR_OK) {
+            priv->init_called = 0U;
+            priv->deinit_called = 0U;
+        }
         return status;
     }
 
@@ -311,6 +317,11 @@ static MotorErr_t bdc_drv_deinit(MotorHandle_t *motor)
     deinit_status = priv->config.port->deinit(priv->config.context);
     priv->direction = MOTOR_DIR_COAST;
     priv->output = 0;
+
+    if ((coast_status == MOTOR_OK) && (deinit_status == MOTOR_OK)) {
+        priv->init_called = 0U;
+        priv->deinit_called = 0U;
+    }
 
     return (coast_status != MOTOR_OK) ? coast_status : deinit_status;
 }

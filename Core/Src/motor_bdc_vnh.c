@@ -251,6 +251,7 @@ void MotorBDC_VNH_Destroy(MotorHandle_t *handle)
 static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
 {
     MotorBDC_VNH_Private_t *priv;
+    MotorErr_t rollback_status;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -266,6 +267,7 @@ static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
     status = priv->config.port->init(priv->config.context);
     if (status != MOTOR_OK) {
         /* 板级 init 必须自行回滚其中途启动的资源。 */
+        priv->init_called = 0U;
         return status;
     }
 
@@ -276,7 +278,11 @@ static MotorErr_t bdc_vnh_init(MotorHandle_t *motor)
     if (status != MOTOR_OK) {
         /* init 已成功，因此用一次 deinit 平衡板级资源引用。 */
         priv->deinit_called = 1U;
-        (void)priv->config.port->deinit(priv->config.context);
+        rollback_status = priv->config.port->deinit(priv->config.context);
+        if (rollback_status == MOTOR_OK) {
+            priv->init_called = 0U;
+            priv->deinit_called = 0U;
+        }
         return status;
     }
 
@@ -309,6 +315,11 @@ static MotorErr_t bdc_vnh_deinit(MotorHandle_t *motor)
     deinit_status = priv->config.port->deinit(priv->config.context);
     priv->direction = MOTOR_DIR_COAST;
     priv->output = 0;
+
+    if ((coast_status == MOTOR_OK) && (deinit_status == MOTOR_OK)) {
+        priv->init_called = 0U;
+        priv->deinit_called = 0U;
+    }
 
     return (coast_status != MOTOR_OK) ? coast_status : deinit_status;
 }
