@@ -90,7 +90,6 @@ typedef struct {
  * 电机句柄（基类）
  * ===================================================================== */
 typedef struct MotorHandle {
-    uint8_t           id;              /* 实例编号 */
     MotorType_t       type;            /* 电机类型 */
     uint8_t           is_initialized;  /* 初始化标志 */
     const MotorOps_t *ops;             /* 操作表（只读） */

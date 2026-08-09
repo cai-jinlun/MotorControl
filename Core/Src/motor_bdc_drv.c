@@ -213,7 +213,6 @@ MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg,
     instance = &s_instance_pool[index];
     memset(instance, 0, sizeof(*instance));
 
-    instance->base.id = (uint8_t)index;
     instance->base.type = MOTOR_TYPE_BDC_DRV;
     instance->base.ops = &s_bdc_drv_ops;
     instance->base.priv = &instance->priv;

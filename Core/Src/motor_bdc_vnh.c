@@ -208,7 +208,6 @@ MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg,
     instance = &s_instance_pool[index];
     memset(instance, 0, sizeof(*instance));
 
-    instance->base.id = (uint8_t)index;
     instance->base.type = MOTOR_TYPE_BDC_VNH;
     instance->base.ops = &s_bdc_vnh_ops;
     instance->base.priv = &instance->priv;
