@@ -107,6 +107,7 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     uint16_t in1 = 0U;
     uint16_t in2 = 0U;
     int16_t applied_output = output;
+    MotorDirection_t applied_direction = direction;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -152,9 +153,14 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
         return MOTOR_ERR_INVALID_PARAM;
     }
 
+    /* 死区或零输出最终提交 IN1=0、IN2=0，物理状态为 Coast。 */
+    if ((in1 == 0U) && (in2 == 0U)) {
+        applied_direction = MOTOR_DIR_COAST;
+    }
+
     status = priv->config.port->set_inputs(priv->config.context, in1, in2);
     if (status == MOTOR_OK) {
-        priv->direction = direction;
+        priv->direction = applied_direction;
         priv->output = applied_output;
         return MOTOR_OK;
     }
