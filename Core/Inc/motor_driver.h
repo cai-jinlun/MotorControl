@@ -13,7 +13,19 @@ extern "C" {
  * ===================================================================== */
 #define MOTOR_OUTPUT_MAX  1000
 #define MOTOR_OUTPUT_MIN  0
-#define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
+
+static inline int16_t Motor_Clamp(int16_t value,
+                                  int16_t min_value,
+                                  int16_t max_value)
+{
+    if (value < min_value) {
+        return min_value;
+    }
+    if (value > max_value) {
+        return max_value;
+    }
+    return value;
+}
 
 /* =====================================================================
  * 错误码

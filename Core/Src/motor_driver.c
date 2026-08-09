@@ -41,7 +41,7 @@ MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output)
     if (motor->ops == NULL || motor->ops->setOutput == NULL) {
         return MOTOR_ERR_NOT_SUPPORTED;
     }
-    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
+    output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
     return motor->ops->setOutput(motor, output);
 }
@@ -57,7 +57,7 @@ MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor, MotorDirection_t dir, int16_
     if (dir >= MOTOR_DIR_MAX) {
         return MOTOR_ERR_INVALID_PARAM;
     }
-    output = CLAMP(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
+    output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
 
     return motor->ops->setDirOutput(motor, dir, output);
 }
