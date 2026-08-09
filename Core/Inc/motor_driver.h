@@ -71,6 +71,7 @@ struct MotorHandle;   /* 前向声明 */
 typedef struct {
     MotorErr_t (*init)(struct MotorHandle *motor);
     MotorErr_t (*deinit)(struct MotorHandle *motor);
+    /* 以下输出回调的 output 已由通用层限制在 MOTOR_OUTPUT_MIN..MOTOR_OUTPUT_MAX。 */
     MotorErr_t (*setOutput)(struct MotorHandle *motor, int16_t output);
     MotorErr_t (*setDirOutput)(struct MotorHandle *motor, MotorDirection_t dir, int16_t output);
     MotorErr_t (*resetPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置设置，主要为重置位置 */

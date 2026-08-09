@@ -118,11 +118,6 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     }
 
     priv = (MotorBDC_DRV_Private_t *)motor->priv;
-    if (applied_output < MOTOR_OUTPUT_MIN) {
-        applied_output = MOTOR_OUTPUT_MIN;
-    } else if (applied_output > MOTOR_OUTPUT_MAX) {
-        applied_output = MOTOR_OUTPUT_MAX;
-    }
 
     switch (direction) {
     case MOTOR_DIR_FORWARD:
