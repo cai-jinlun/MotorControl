@@ -168,12 +168,6 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
     return status;
 }
 
-/* 向通用电机框架注册 BDC_VNH 的操作表。 */
-MotorErr_t MotorBDC_VNH_ModuleInit(void)
-{
-    return Motor_RegisterOps(MOTOR_TYPE_BDC_VNH, &s_bdc_vnh_ops);
-}
-
 /* 从静态池创建实例、复制配置并自动进入已初始化的 Coast 状态。 */
 MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg)
 {

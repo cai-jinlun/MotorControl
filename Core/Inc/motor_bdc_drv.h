@@ -52,9 +52,6 @@ typedef struct {
     uint16_t                      dead_zone;
 } MotorBDC_DRV_Config_t;
 
-/* 将 MOTOR_TYPE_BDC_DRV 操作表注册到通用电机层；系统启动时调用一次。 */
-MotorErr_t MotorBDC_DRV_ModuleInit(void);
-
 /* 创建会自动完成 Motor_Init；失败返回 NULL。配置内容会被复制到实例中。 */
 MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg);
 

@@ -57,9 +57,6 @@ typedef struct {
     uint16_t                      dead_zone;
 } MotorBDC_VNH_Config_t;
 
-/* 将 MOTOR_TYPE_BDC_VNH 操作表注册到通用电机层；系统启动时调用一次。 */
-MotorErr_t MotorBDC_VNH_ModuleInit(void);
-
 /* 创建会复制配置并自动完成 Motor_Init；失败返回 NULL。 */
 MotorHandle_t *MotorBDC_VNH_Create(const MotorBDC_VNH_Config_t *cfg);
 

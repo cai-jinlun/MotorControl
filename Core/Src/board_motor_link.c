@@ -92,8 +92,6 @@ static MotorHandle_t *s_door_motor;
 static MotorHandle_t *s_unlock_motor;
 static MotorHandle_t *s_cinch_motor;
 static uint8_t s_initialized;
-static uint8_t s_drv_module_registered;
-static uint8_t s_vnh_module_registered;
 
 /* 将通用电机输出 0~1000 映射到定时器实际 ARR，兼容不同 PWM 周期。 */
 static uint32_t output_to_compare(const TIM_HandleTypeDef *timer,
@@ -323,28 +321,12 @@ static MotorErr_t lock_vnh_set_outputs(void *context,
 
 MotorErr_t BoardMotorLink_Init(void)
 {
-    MotorErr_t status;
     MotorBDC_DRV_Config_t door_config;
     MotorBDC_VNH_Config_t unlock_config;
     MotorBDC_VNH_Config_t cinch_config;
 
     if (s_initialized != 0U) {
         return MOTOR_ERR_ALREADY_INIT;
-    }
-
-    if (s_drv_module_registered == 0U) {
-        status = MotorBDC_DRV_ModuleInit();
-        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
-            return status;
-        }
-        s_drv_module_registered = 1U;
-    }
-    if (s_vnh_module_registered == 0U) {
-        status = MotorBDC_VNH_ModuleInit();
-        if ((status != MOTOR_OK) && (status != MOTOR_ERR_ALREADY_INIT)) {
-            return status;
-        }
-        s_vnh_module_registered = 1U;
     }
 
     door_config.port = &s_door_drv_port_ops;

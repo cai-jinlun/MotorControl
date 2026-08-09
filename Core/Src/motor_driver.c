@@ -1,23 +1,6 @@
 #include "motor_driver.h"
 #include <string.h>
 
-/* 操作表注册中心 */
-static const MotorOps_t *g_ops_registry[MOTOR_TYPE_MAX] = {NULL};
-
-/* ------------------------------------------------------------------ */
-MotorErr_t Motor_RegisterOps(MotorType_t type, const MotorOps_t *ops)
-{
-    if(ops == NULL) return MOTOR_ERR_NULL_PTR;
-    if (type >= MOTOR_TYPE_MAX ) {
-        return MOTOR_ERR_INVALID_PARAM;
-    }
-    if (g_ops_registry[type] != NULL) {
-        return MOTOR_ERR_ALREADY_INIT;   /* 防止重复注册 */
-    }
-    g_ops_registry[type] = ops;
-    return MOTOR_OK;
-}
-
 /* ------------------------------------------------------------------ */
 MotorErr_t Motor_Init(MotorHandle_t *motor)
 {

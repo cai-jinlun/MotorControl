@@ -167,12 +167,6 @@ static MotorErr_t bdc_drv_apply(MotorHandle_t *motor,
     return status;
 }
 
-/* 向通用电机框架注册 BDC_DRV 的操作表。 */
-MotorErr_t MotorBDC_DRV_ModuleInit(void)
-{
-    return Motor_RegisterOps(MOTOR_TYPE_BDC_DRV, &s_bdc_drv_ops);
-}
-
 /* 从静态池创建实例、复制配置并自动进入已初始化的 Coast 状态。 */
 MotorHandle_t *MotorBDC_DRV_Create(const MotorBDC_DRV_Config_t *cfg)
 {

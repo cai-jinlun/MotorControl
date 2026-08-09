@@ -88,8 +88,6 @@ typedef struct MotorHandle {
 /* =====================================================================
  * 统一API（上层业务只调用这些）
  * ===================================================================== */
-MotorErr_t Motor_RegisterOps(MotorType_t type, const MotorOps_t *ops);
-
 MotorErr_t Motor_Init(MotorHandle_t *motor);
 MotorErr_t Motor_Deinit(MotorHandle_t *motor);
 
