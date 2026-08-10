@@ -30,6 +30,7 @@
 /* USER CODE BEGIN Includes */
 #include "board_motor_link.h"
 #include "current_sense.h"
+#include "external_input.h"
 #include "quad_encoder.h"
 /* USER CODE END Includes */
 
@@ -110,6 +111,18 @@ int main(void)
    * 所有电机控制任务在初始化成功后才启动；下方 HAL 中断回调仍保留在 ISR。
    */
   if (BoardMotorLink_Init() != MOTOR_OK)
+  {
+    Error_Handler();
+  }
+  /*
+   * 裸机阶段由 TIM6 每 1 ms 驱动输入去抖。FreeRTOS 阶段不再启动 TIM6，
+   * 改由传感器任务周期调用 ExternalInput_Service()。
+   */
+  if (ExternalInput_Init() != EXTERNAL_INPUT_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_Base_Start_IT(&htim6) != HAL_OK)
   {
     Error_Handler();
   }
@@ -207,7 +220,11 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
+  if (htim->Instance == TIM6)
+  {
+    /* ISR 只采样、去抖和发布事件，不执行任何车门或电机业务。 */
+    (void)ExternalInput_Service(1U);
+  }
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM7)
   {
