@@ -121,6 +121,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /* FreeRTOS 下将此周期服务整体移入唯一的电机控制任务。 */
     if (BoardMotorLink_Service() != MOTOR_OK)
     {
       Error_Handler();

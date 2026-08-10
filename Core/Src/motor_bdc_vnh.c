@@ -142,7 +142,7 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
         return MOTOR_ERR_INVALID_PARAM;
     }
 
-    /* Zero/dead-zone output is physically stopped and must not count as running. */
+    /* 零输出或死区输出没有实际驱动，应缓存为 COAST，避免通用层误计时。 */
     if ((applied_output == 0) &&
         ((direction == MOTOR_DIR_FORWARD) ||
          (direction == MOTOR_DIR_BACKWARD))) {

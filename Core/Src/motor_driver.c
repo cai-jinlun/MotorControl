@@ -1,5 +1,6 @@
 #include "motor_driver.h"
 
+/* 全局时间源必须在首次运行命令前一次性配置，运行中切换会破坏时间差语义。 */
 static MotorTimeSource_t s_time_source;
 
 static uint8_t motor_direction_is_running(MotorDirection_t direction)
@@ -8,7 +9,10 @@ static uint8_t motor_direction_is_running(MotorDirection_t direction)
             (direction == MOTOR_DIR_BACKWARD)) ? 1U : 0U;
 }
 
-/* Synchronize the generic timer with the direction actually cached by the driver. */
+/*
+ * 以具体驱动最终缓存的方向为准同步计时，不能只依据上层请求方向：
+ * 死区、零输出或硬件失败回退都可能使最终状态变为 COAST。
+ */
 static MotorErr_t motor_sync_run_monitor(MotorHandle_t *motor)
 {
     MotorDirection_t direction;
@@ -20,6 +24,7 @@ static MotorErr_t motor_sync_run_monitor(MotorHandle_t *motor)
     }
 
     if (motor_direction_is_running(direction) != 0U) {
+        /* 只在停止到运行的边沿记录起点，因此正反向直接切换会连续累计。 */
         if (motor->run_monitor.is_running == 0U) {
             if (s_time_source == NULL) {
                 return MOTOR_ERR_NOT_READY;
@@ -28,6 +33,7 @@ static MotorErr_t motor_sync_run_monitor(MotorHandle_t *motor)
             motor->run_monitor.is_running = 1U;
         }
     } else {
+        /* 任一停止方式都结束当前运行周期，查询时将返回 0。 */
         motor->run_monitor.start_time_ms = 0U;
         motor->run_monitor.is_running = 0U;
     }
@@ -51,6 +57,7 @@ MotorErr_t Motor_Init(MotorHandle_t *motor)
         motor->run_monitor.start_time_ms = 0U;
         motor->run_monitor.is_running = 0U;
         motor->run_monitor.timeout_latched = 0U;
+        /* 静态实例首次创建时该字段为 0（FORWARD），必须收敛到安全停止值。 */
         if ((motor->run_monitor.timeout_stop_mode != MOTOR_DIR_COAST) &&
             (motor->run_monitor.timeout_stop_mode != MOTOR_DIR_BRAKE)) {
             motor->run_monitor.timeout_stop_mode = MOTOR_DIR_COAST;
@@ -91,6 +98,7 @@ MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output)
         return MOTOR_ERR_NOT_SUPPORTED;
     }
     if (motor->run_monitor.timeout_latched != 0U) {
+        /* SetOutput 不改变方向；锁存后仅允许它维持已停止的 COAST/BRAKE。 */
         status = motor->ops->getDriveDirection(motor, &direction);
         if (status != MOTOR_OK) {
             return status;
@@ -103,6 +111,7 @@ MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output)
     output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
     status = motor->ops->setOutput(motor, output);
     if (status != MOTOR_OK) {
+        /* 即使提交失败，具体驱动也可能已成功回退到 COAST。 */
         (void)motor_sync_run_monitor(motor);
         return status;
     }
@@ -128,13 +137,14 @@ MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor,
         return MOTOR_ERR_TIMEOUT_LATCHED;
     }
     if ((motor_direction_is_running(dir) != 0U) && (s_time_source == NULL)) {
+        /* 在给电机上电前失败，避免输出已生效却无法建立可靠计时起点。 */
         return MOTOR_ERR_NOT_READY;
     }
 
     output = Motor_Clamp(output, MOTOR_OUTPUT_MIN, MOTOR_OUTPUT_MAX);
     status = motor->ops->setDirOutput(motor, dir, output);
     if (status != MOTOR_OK) {
-        /* A concrete driver may have fallen back to COAST after the failure. */
+        /* 具体驱动可能已在失败路径中回退到 COAST，仍需同步通用状态。 */
         (void)motor_sync_run_monitor(motor);
         return status;
     }
@@ -174,6 +184,7 @@ MotorErr_t Motor_ConfigureRunTimeout(MotorHandle_t *motor,
 
     motor->run_monitor.timeout_ms = timeout_ms;
     motor->run_monitor.timeout_stop_mode = stop_mode;
+    /* 故意不清除 timeout_latched，故障恢复必须走显式清除接口。 */
     return MOTOR_OK;
 }
 
@@ -259,7 +270,7 @@ MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms)
         return MOTOR_ERR_NOT_READY;
     }
 
-    /* Unsigned subtraction remains correct when the 32-bit tick wraps. */
+    /* 无符号减法天然兼容 32 位毫秒 tick 回绕。 */
     *time_ms = s_time_source() - motor->run_monitor.start_time_ms;
     return MOTOR_OK;
 }
@@ -300,6 +311,7 @@ MotorErr_t Motor_Service(MotorHandle_t *motor)
     if (motor == NULL) return MOTOR_ERR_NULL_PTR;
     if (!motor->is_initialized) return MOTOR_ERR_NOT_INITIALIZED;
     if (motor->run_monitor.timeout_latched != 0U) {
+        /* 上次停机失败且仍在运行时，每次服务都继续重试安全停机。 */
         if (motor->run_monitor.is_running != 0U) {
             return Motor_SetDirOutput(motor,
                                       motor->run_monitor.timeout_stop_mode,
@@ -320,7 +332,7 @@ MotorErr_t Motor_Service(MotorHandle_t *motor)
         return MOTOR_OK;
     }
 
-    /* Latch first so a failed stop cannot be followed by another run command. */
+    /* 先锁存再停机，确保停机提交失败时也不能接受新的运行命令。 */
     motor->run_monitor.timeout_latched = 1U;
     return Motor_SetDirOutput(motor,
                               motor->run_monitor.timeout_stop_mode,

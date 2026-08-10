@@ -13,6 +13,7 @@
 #define DOOR_CURRENT_OFFSET_COUNTS  2048.0f
 #define DOOR_CURRENT_AMPS_PER_COUNT 0.0201f
 #define BOARD_MOTOR_DEAD_ZONE        0U
+/* 阈值 0 表示上电默认禁用，必须在机构标定后由上层显式配置。 */
 #define DOOR_RUN_TIMEOUT_MS          0U
 #define UNLOCK_RUN_TIMEOUT_MS        0U
 #define CINCH_RUN_TIMEOUT_MS         0U
@@ -382,7 +383,7 @@ MotorErr_t BoardMotorLink_Init(void)
         return cleanup_status;
     }
 
-    /* TIM7 supplies HAL_GetTick now; an RTOS build may replace this callback. */
+    /* 当前 HAL tick 由独立 TIM7 提供；引入 RTOS 后可只替换此时间源。 */
     status = Motor_SetTimeSource(HAL_GetTick);
     if (status != MOTOR_OK) {
         return status;
@@ -397,6 +398,7 @@ MotorErr_t BoardMotorLink_Init(void)
     }
     status = Motor_ConfigureRunTimeout(s_door_motor,
                                        DOOR_RUN_TIMEOUT_MS,
+                                       /* 撑杆超时后主动制动，减少门体惯性移动。 */
                                        MOTOR_DIR_BRAKE);
     if (status != MOTOR_OK) {
         cleanup_status = board_motor_link_cleanup_instances();
@@ -413,6 +415,7 @@ MotorErr_t BoardMotorLink_Init(void)
     }
     status = Motor_ConfigureRunTimeout(s_unlock_motor,
                                        UNLOCK_RUN_TIMEOUT_MS,
+                                       /* 门锁电机使用自由滑行，避免持续制动发热。 */
                                        MOTOR_DIR_COAST);
     if (status != MOTOR_OK) {
         cleanup_status = board_motor_link_cleanup_instances();
@@ -429,6 +432,7 @@ MotorErr_t BoardMotorLink_Init(void)
     }
     status = Motor_ConfigureRunTimeout(s_cinch_motor,
                                        CINCH_RUN_TIMEOUT_MS,
+                                       /* 门锁电机使用自由滑行，避免持续制动发热。 */
                                        MOTOR_DIR_COAST);
     if (status != MOTOR_OK) {
         cleanup_status = board_motor_link_cleanup_instances();
@@ -449,6 +453,7 @@ MotorErr_t BoardMotorLink_Service(void)
         return MOTOR_ERR_NOT_INITIALIZED;
     }
 
+    /* 即使某一电机服务失败，也继续检查其余电机，最后返回首个错误。 */
     status = Motor_Service(s_door_motor);
     if (status != MOTOR_OK) {
         first_error = status;

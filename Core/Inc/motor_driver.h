@@ -71,12 +71,16 @@ struct MotorHandle;   /* 前向声明 */
 
 typedef uint32_t (*MotorTimeSource_t)(void);
 
+/*
+ * 当前一次连续运行的监控状态。FORWARD/BACKWARD 之间直接换向不会重置
+ * start_time_ms；只有成功进入 COAST/BRAKE 才结束本次计时。
+ */
 typedef struct {
-    uint32_t         start_time_ms;
-    uint32_t         timeout_ms;
-    MotorDirection_t timeout_stop_mode;
-    uint8_t          is_running;
-    uint8_t          timeout_latched;
+    uint32_t         start_time_ms;     /* 从停止态进入运行态时的毫秒时间戳 */
+    uint32_t         timeout_ms;        /* 0 表示禁用自动超时保护 */
+    MotorDirection_t timeout_stop_mode; /* 超时后只允许 COAST 或 BRAKE */
+    uint8_t          is_running;        /* 缓存的实际驱动状态是否为正/反转 */
+    uint8_t          timeout_latched;   /* 锁存后必须由上层显式清除 */
 } MotorRunMonitor_t;
 
 typedef struct {
@@ -118,13 +122,19 @@ MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor, MotorDirection_t dir, int16_
 MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position);
 /* 在任何电机进入运行状态前配置；运行期间不得切换时间源。 */
 MotorErr_t Motor_SetTimeSource(MotorTimeSource_t time_source);
-/* timeout_ms == 0 时禁用自动超时；stop_mode 仅允许 COAST 或 BRAKE。 */
+/* 修改阈值不会清除已有超时锁存；stop_mode 仅允许 COAST 或 BRAKE。 */
 MotorErr_t Motor_ConfigureRunTimeout(MotorHandle_t *motor,
                                      uint32_t timeout_ms,
                                      MotorDirection_t stop_mode);
+/* 返回当前一次连续运行时间；停止状态固定返回 0。 */
 MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms);
 MotorErr_t Motor_GetRunTimeout(const MotorHandle_t *motor, uint8_t *timed_out);
+/* 仅允许在实际驱动方向已经停止时清除超时锁存。 */
 MotorErr_t Motor_ClearRunTimeout(MotorHandle_t *motor);
+/*
+ * 周期执行超时检查。裸机由主循环调用；FreeRTOS 下应由唯一的电机控制
+ * 任务串行调用，禁止从 ISR 或多个任务并发调用电机控制接口。
+ */
 MotorErr_t Motor_Service(MotorHandle_t *motor);
     
 MotorErr_t Motor_GetOutput(const MotorHandle_t *motor, int16_t *output);
