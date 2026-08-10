@@ -121,6 +121,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (BoardMotorLink_Service() != MOTOR_OK)
+    {
+      Error_Handler();
+    }
   }
   /* USER CODE END 3 */
 }

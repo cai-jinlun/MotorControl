@@ -34,6 +34,7 @@
 - `motor_bdc_drv`：面向 DRV 类双输入有刷电机的实现，通过端口操作接口隔离具体 MCU 和板级资源。
 - `motor_bdc_vnh`：面向 VNH 类 PWM + 双方向引脚电机的基础实现。
 - `board_motor_link`：实例化 H1 车门、H4 解锁和 H5 吸合电机，并将 H1 的 Hall 与安培值电流反馈绑定到通用电机接口。
+- 通用电机运行计时与超时保护：支持独立阈值、COAST/BRAKE 超时停机和故障锁存。
 
 ### 尚未完成
 
@@ -46,7 +47,7 @@
 - CAN/串口应用协议、诊断和状态上报。
 - 面向实车的参数标定、故障注入和安全验证。
 
-当前 `main` 完成外设及三个板级电机实例的统一初始化后进入空循环，尚未运行完整的车门业务逻辑。
+当前 `main` 完成外设及三个板级电机实例的统一初始化后，在裸机主循环中周期执行电机超时服务，尚未运行完整的车门业务逻辑。
 
 ## 目标软件架构
 
@@ -81,6 +82,28 @@ flowchart TD
 ### 通用电机层
 
 `motor_driver` 为上层提供统一接口。当前输出量统一为 `0~1000`，它表示驱动输出请求，而不等同于实际闭环速度。测量位置、速度、电流等能力由具体电机实现按硬件条件提供。
+
+#### 运行计时与超时保护
+
+`motor_driver` 使用统一毫秒时间源记录每个电机当前一次连续驱动时间。成功进入
+`MOTOR_DIR_FORWARD` 或 `MOTOR_DIR_BACKWARD` 后开始计时，正反转直接切换不会清零；
+进入 `MOTOR_DIR_COAST` 或 `MOTOR_DIR_BRAKE` 后立即清零。
+
+上层使用以下接口配置和查询：
+
+```c
+Motor_ConfigureRunTimeout(motor, timeout_ms, MOTOR_DIR_COAST);
+Motor_GetRunningTime(motor, &running_time_ms);
+Motor_GetRunTimeout(motor, &timed_out);
+Motor_ClearRunTimeout(motor);
+```
+
+`timeout_ms` 为 `0` 时禁用自动超时。发生超时后，驱动会切换到配置的停止方式并锁存故障；
+锁存期间拒绝新的正反转命令，必须在电机已经停止后显式清除。当前板级默认不启用阈值，
+但预设 H1 撑杆电机使用 BRAKE，H4/H5 门锁电机使用 COAST，等待机构标定后由上层设置阈值。
+
+裸机主循环调用 `BoardMotorLink_Service()`。引入 FreeRTOS 后应将同一调用移入唯一的电机控制任务；
+电机命令、超时服务和故障清除由该任务串行执行，其他任务通过队列发送请求，不应在 ISR 中执行停机状态机。
 
 ### 机构层
 

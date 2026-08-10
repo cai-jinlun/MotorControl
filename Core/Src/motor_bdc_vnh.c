@@ -101,6 +101,7 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
     uint8_t in_a = 0U;
     uint8_t in_b = 0U;
     int16_t applied_output = output;
+    MotorDirection_t applied_direction = direction;
     MotorErr_t status;
 
     if ((motor == NULL) || (motor->priv == NULL)) {
@@ -141,12 +142,21 @@ static MotorErr_t bdc_vnh_apply(MotorHandle_t *motor,
         return MOTOR_ERR_INVALID_PARAM;
     }
 
+    /* Zero/dead-zone output is physically stopped and must not count as running. */
+    if ((applied_output == 0) &&
+        ((direction == MOTOR_DIR_FORWARD) ||
+         (direction == MOTOR_DIR_BACKWARD))) {
+        in_a = 0U;
+        in_b = 0U;
+        applied_direction = MOTOR_DIR_COAST;
+    }
+
     status = priv->config.port->set_outputs(priv->config.context,
                                              in_a,
                                              in_b,
                                              (uint16_t)applied_output);
     if (status == MOTOR_OK) {
-        priv->direction = direction;
+        priv->direction = applied_direction;
         priv->output = applied_output;
         return MOTOR_OK;
     }
