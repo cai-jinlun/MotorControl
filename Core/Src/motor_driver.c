@@ -1,4 +1,5 @@
 #include "motor_driver.h"
+#include <stddef.h>  /* NULL 的标准定义位置 */
 
 /* 全局时间源必须在首次运行命令前一次性配置，运行中切换会破坏时间差语义。 */
 static MotorTimeSource_t s_time_source;

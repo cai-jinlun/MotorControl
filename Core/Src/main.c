@@ -102,6 +102,7 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM4_Init();
   MX_USART2_UART_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
   /*
    * 初始化 H1 车门电机、H4 解锁电机和 H5 吸合电机。
