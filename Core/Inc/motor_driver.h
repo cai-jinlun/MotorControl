@@ -40,6 +40,7 @@ typedef enum {
     MOTOR_ERR_NOT_SUPPORTED = -6,     /* 功能未实现 */
     MOTOR_ERR_ALREADY_INIT = -7,      /* 重复初始化 */
     MOTOR_ERR_NOT_READY = -8,         /* 测量数据尚未准备完成 */
+    MOTOR_ERR_TIMEOUT_LATCHED = -9,   /* 运行超时已锁存，拒绝再次运行 */
 } MotorErr_t;
 
 /* =====================================================================
@@ -68,6 +69,20 @@ typedef enum {
  * ===================================================================== */
 struct MotorHandle;   /* 前向声明 */
 
+typedef uint32_t (*MotorTimeSource_t)(void);
+
+/*
+ * 当前一次连续运行的监控状态。FORWARD/BACKWARD 之间直接换向不会重置
+ * start_time_ms；只有成功进入 COAST/BRAKE 才结束本次计时。
+ */
+typedef struct {
+    uint32_t         start_time_ms;     /* 从停止态进入运行态时的毫秒时间戳 */
+    uint32_t         timeout_ms;        /* 0 表示禁用自动超时保护 */
+    MotorDirection_t timeout_stop_mode; /* 超时后只允许 COAST 或 BRAKE */
+    uint8_t          is_running;        /* 缓存的实际驱动状态是否为正/反转 */
+    uint8_t          timeout_latched;   /* 锁存后必须由上层显式清除 */
+} MotorRunMonitor_t;
+
 typedef struct {
     MotorErr_t (*init)(struct MotorHandle *motor);
     MotorErr_t (*deinit)(struct MotorHandle *motor);
@@ -75,16 +90,14 @@ typedef struct {
     MotorErr_t (*setOutput)(struct MotorHandle *motor, int16_t output);
     MotorErr_t (*setDirOutput)(struct MotorHandle *motor, MotorDirection_t dir, int16_t output);
     MotorErr_t (*resetPosition)(struct MotorHandle *motor, int32_t position);  /* 可选：位置设置，主要为重置位置 */
-    MotorErr_t (*setRunningTime)(struct MotorHandle *motor, uint32_t time_ms); /* 可选：设置运行时间（ms） */
     // MotorErr_t (*getStatus)(const struct MotorHandle *motor);
 
     MotorErr_t (*getOutput)(const struct MotorHandle *motor, int16_t *output);  /* 可选：驱动输出读取 */
-    MotorErr_t (*getDriveDirection)(const struct MotorHandle *motor, MotorDirection_t *dir); /* 可选：驱动方向读取 */
+    MotorErr_t (*getDriveDirection)(const struct MotorHandle *motor, MotorDirection_t *dir); /* 必选：用于同步运行计时状态 */
     MotorErr_t (*getMeasuredDirection)(const struct MotorHandle *motor, MotorDirection_t *dir); /* 可选：测量方向读取 */
     MotorErr_t (*getMeasuredPosition)(const struct MotorHandle *motor, int32_t *position); /* 可选：测量位置读取 */
     MotorErr_t (*getMeasuredVelocity)(const struct MotorHandle *motor, float *velocity); /* 可选：测量速度读取 */
     MotorErr_t (*getMeasuredCurrent)(const struct MotorHandle *motor, float *current); /* 可选：测量电流读取 */
-    MotorErr_t (*getRunningTime)(const struct MotorHandle *motor, uint32_t *time_ms); /* 可选：运行时间读取（ms） */
 } MotorOps_t;
 
 /* =====================================================================
@@ -95,6 +108,7 @@ typedef struct MotorHandle {
     uint8_t           is_initialized;  /* 初始化标志 */
     const MotorOps_t *ops;             /* 操作表（只读） */
     void             *priv;            /* 私有数据（外部严禁访问） */
+    MotorRunMonitor_t run_monitor;      /* 通用运行计时与超时状态 */
 } MotorHandle_t;
 
 /* =====================================================================
@@ -106,7 +120,22 @@ MotorErr_t Motor_Deinit(MotorHandle_t *motor);
 MotorErr_t Motor_SetOutput(MotorHandle_t *motor, int16_t output);
 MotorErr_t Motor_SetDirOutput(MotorHandle_t *motor, MotorDirection_t dir, int16_t output);
 MotorErr_t Motor_ResetPosition(MotorHandle_t *motor, int32_t position);
-MotorErr_t Motor_SetRunningTime(MotorHandle_t *motor, uint32_t time_ms);
+/* 在任何电机进入运行状态前配置；运行期间不得切换时间源。 */
+MotorErr_t Motor_SetTimeSource(MotorTimeSource_t time_source);
+/* 修改阈值不会清除已有超时锁存；stop_mode 仅允许 COAST 或 BRAKE。 */
+MotorErr_t Motor_ConfigureRunTimeout(MotorHandle_t *motor,
+                                     uint32_t timeout_ms,
+                                     MotorDirection_t stop_mode);
+/* 返回当前一次连续运行时间；停止状态固定返回 0。 */
+MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms);
+MotorErr_t Motor_GetRunTimeout(const MotorHandle_t *motor, uint8_t *timed_out);
+/* 仅允许在实际驱动方向已经停止时清除超时锁存。 */
+MotorErr_t Motor_ClearRunTimeout(MotorHandle_t *motor);
+/*
+ * 周期执行超时检查。裸机由主循环调用；FreeRTOS 下应由唯一的电机控制
+ * 任务串行调用，禁止从 ISR 或多个任务并发调用电机控制接口。
+ */
+MotorErr_t Motor_Service(MotorHandle_t *motor);
     
 MotorErr_t Motor_GetOutput(const MotorHandle_t *motor, int16_t *output);
 MotorErr_t Motor_GetDriveDirection(const MotorHandle_t *motor, MotorDirection_t *dir);
@@ -114,7 +143,6 @@ MotorErr_t Motor_GetMeasuredDirection(const MotorHandle_t *motor, MotorDirection
 MotorErr_t Motor_GetMeasuredPosition(const MotorHandle_t *motor, int32_t *position);
 MotorErr_t Motor_GetMeasuredVelocity(const MotorHandle_t *motor, float *velocity);
 MotorErr_t Motor_GetMeasuredCurrent(const MotorHandle_t *motor, float *current);
-MotorErr_t Motor_GetRunningTime(const MotorHandle_t *motor, uint32_t *time_ms);
 
 /* 便捷函数：停止 */
 // static inline MotorErr_t Motor_Stop(MotorHandle_t *motor, MotorDirection_t mode)

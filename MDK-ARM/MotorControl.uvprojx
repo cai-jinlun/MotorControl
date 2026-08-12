@@ -425,6 +425,16 @@
               <FilePath>../Core/Src/current_sense.c</FilePath>
             </File>
             <File>
+              <FileName>external_input.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/external_input.c</FilePath>
+            </File>
+            <File>
+              <FileName>external_input_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/external_input_port.c</FilePath>
+            </File>
+            <File>
               <FileName>motor_bdc_drv.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\motor_bdc_drv.c</FilePath>

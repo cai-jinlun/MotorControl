@@ -15,6 +15,9 @@ extern "C" {
  */
 MotorErr_t BoardMotorLink_Init(void);
 
+/* 裸机主循环或未来的单一电机控制任务周期调用。 */
+MotorErr_t BoardMotorLink_Service(void);
+
 /* Getter 返回的句柄由板级链接层持有，上层仅通过 Motor_* API 使用。 */
 MotorHandle_t *BoardMotorLink_GetDoorMotor(void);   /* 车门撑杆电机：DRV8714 / H1 */
 MotorHandle_t *BoardMotorLink_GetUnlockMotor(void); /* 解锁电机：VNH7070 / H4 */

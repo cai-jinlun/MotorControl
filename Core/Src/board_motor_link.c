@@ -13,6 +13,10 @@
 #define DOOR_CURRENT_OFFSET_COUNTS  2048.0f
 #define DOOR_CURRENT_AMPS_PER_COUNT 0.0201f
 #define BOARD_MOTOR_DEAD_ZONE        0U
+/* 阈值 0 表示上电默认禁用，必须在机构标定后由上层显式配置。 */
+#define DOOR_RUN_TIMEOUT_MS          0U
+#define UNLOCK_RUN_TIMEOUT_MS        0U
+#define CINCH_RUN_TIMEOUT_MS         0U
 
 typedef struct {
     TIM_HandleTypeDef *timer;
@@ -379,6 +383,12 @@ MotorErr_t BoardMotorLink_Init(void)
         return cleanup_status;
     }
 
+    /* 当前 HAL tick 由独立 TIM7 提供；引入 RTOS 后可只替换此时间源。 */
+    status = Motor_SetTimeSource(HAL_GetTick);
+    if (status != MOTOR_OK) {
+        return status;
+    }
+
     door_config.port = &s_door_drv_port_ops;
     door_config.context = &s_door_context;
     door_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
@@ -386,12 +396,28 @@ MotorErr_t BoardMotorLink_Init(void)
     if (s_door_motor == NULL) {
         return status;
     }
+    status = Motor_ConfigureRunTimeout(s_door_motor,
+                                       DOOR_RUN_TIMEOUT_MS,
+                                       /* 撑杆超时后主动制动，减少门体惯性移动。 */
+                                       MOTOR_DIR_BRAKE);
+    if (status != MOTOR_OK) {
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
+    }
 
     unlock_config.port = &s_lock_vnh_port_ops;
     unlock_config.context = &s_unlock_context;
     unlock_config.dead_zone = BOARD_MOTOR_DEAD_ZONE;
     s_unlock_motor = MotorBDC_VNH_Create(&unlock_config, &status);
     if (s_unlock_motor == NULL) {
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
+    }
+    status = Motor_ConfigureRunTimeout(s_unlock_motor,
+                                       UNLOCK_RUN_TIMEOUT_MS,
+                                       /* 门锁电机使用自由滑行，避免持续制动发热。 */
+                                       MOTOR_DIR_COAST);
+    if (status != MOTOR_OK) {
         cleanup_status = board_motor_link_cleanup_instances();
         return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
@@ -404,9 +430,46 @@ MotorErr_t BoardMotorLink_Init(void)
         cleanup_status = board_motor_link_cleanup_instances();
         return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
     }
+    status = Motor_ConfigureRunTimeout(s_cinch_motor,
+                                       CINCH_RUN_TIMEOUT_MS,
+                                       /* 门锁电机使用自由滑行，避免持续制动发热。 */
+                                       MOTOR_DIR_COAST);
+    if (status != MOTOR_OK) {
+        cleanup_status = board_motor_link_cleanup_instances();
+        return (cleanup_status != MOTOR_OK) ? cleanup_status : status;
+    }
 
     s_initialized = 1U;
     return MOTOR_OK;
+}
+
+MotorErr_t BoardMotorLink_Service(void)
+{
+    MotorErr_t first_error = MOTOR_OK;
+    MotorErr_t status;
+
+    if ((s_initialized == 0U) || (s_door_motor == NULL) ||
+        (s_unlock_motor == NULL) || (s_cinch_motor == NULL)) {
+        return MOTOR_ERR_NOT_INITIALIZED;
+    }
+
+    /* 即使某一电机服务失败，也继续检查其余电机，最后返回首个错误。 */
+    status = Motor_Service(s_door_motor);
+    if (status != MOTOR_OK) {
+        first_error = status;
+    }
+
+    status = Motor_Service(s_unlock_motor);
+    if ((status != MOTOR_OK) && (first_error == MOTOR_OK)) {
+        first_error = status;
+    }
+
+    status = Motor_Service(s_cinch_motor);
+    if ((status != MOTOR_OK) && (first_error == MOTOR_OK)) {
+        first_error = status;
+    }
+
+    return first_error;
 }
 
 MotorHandle_t *BoardMotorLink_GetDoorMotor(void)
