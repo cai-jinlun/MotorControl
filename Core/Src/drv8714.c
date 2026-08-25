@@ -3,10 +3,11 @@
   * @file    drv8714.c
   * @brief   DRV8714-Q1/S-Q1 智能半桥栅极驱动器控制实现
   * 
-  * SPI 帧格式（基于 DRV871x 系列常见定义）：
+  * SPI 帧格式（依据 DRV8714-Q1 数据手册）：
   *   - 16 bit / MSB first
-  *   - bit15: R/W (0=写, 1=读)
-  *   - bit14-8: 寄存器地址 (7 bit)
+  *   - bit15: 固定为 0
+  *   - bit14: R/W (0=写, 1=读)
+  *   - bit13-8: 寄存器地址 (6 bit)
   *   - bit7-0:  数据 (8 bit)
   * 
   * 返回帧：
@@ -26,9 +27,9 @@
 #include "tim.h"
 
 /* SPI 命令掩码 */
-#define DRV8714_SPI_READ_MSK      0x8000U
+#define DRV8714_SPI_READ_MSK      0x4000U
 #define DRV8714_SPI_ADDR_SHIFT    8U
-#define DRV8714_SPI_ADDR_MSK      0x7FU
+#define DRV8714_SPI_ADDR_MSK      0x3FU
 #define DRV8714_SPI_DATA_MSK      0xFFU
 
 /* 片选拉低/拉高 */
