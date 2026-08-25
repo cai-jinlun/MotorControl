@@ -43,15 +43,16 @@ extern "C" {
 #define DRV8714_REG_IDRV_CTRL2    0x10U
 #define DRV8714_REG_IDRV_CTRL3    0x11U
 #define DRV8714_REG_IDRV_CTRL4    0x12U
-#define DRV8714_REG_DRV_CTRL1     0x17U
-#define DRV8714_REG_DRV_CTRL2     0x18U
-#define DRV8714_REG_DRV_CTRL3     0x19U
-#define DRV8714_REG_DRV_CTRL4     0x1AU
-#define DRV8714_REG_VDS_CTRL1     0x1EU
-#define DRV8714_REG_VDS_CTRL2     0x1FU
-#define DRV8714_REG_OLSC_CTRL1    0x22U
-#define DRV8714_REG_UVOV_CTRL     0x24U
-#define DRV8714_REG_CSA_CTRL1     0x25U
+#define DRV8714_REG_IDRV_CTRL9    0x17U
+#define DRV8714_REG_DRV_CTRL1     0x18U
+#define DRV8714_REG_DRV_CTRL2     0x19U
+#define DRV8714_REG_DRV_CTRL3     0x1AU
+#define DRV8714_REG_DRV_CTRL4     0x1BU
+#define DRV8714_REG_VDS_CTRL1     0x1FU
+#define DRV8714_REG_VDS_CTRL2     0x20U
+#define DRV8714_REG_OLSC_CTRL1    0x23U
+#define DRV8714_REG_UVOV_CTRL     0x25U
+#define DRV8714_REG_CSA_CTRL1     0x26U
 
 /* =============== IC_CTRL1 (0x07) 位定义 =============== */
 #define IC_CTRL1_EN_DRV_Pos       7U
@@ -67,12 +68,13 @@ extern "C" {
 
 /* BRG_MODE 模式 */
 #define BRG_MODE_INDEPENDENT      0x0U  /* 独立半桥 */
-#define BRG_MODE_H_BRIDGE         0x1U  /* H 桥模式 */
+#define BRG_MODE_H_BRIDGE_PH_EN   0x1U  /* H 桥 PH/EN 控制 */
+#define BRG_MODE_H_BRIDGE_PWM     0x2U  /* H 桥双输入 PWM 控制 */
 #define BRG_MODE_SOLENOID         0x3U  /* 分离式 HS/LS 电磁阀模式 */
 
-/* LOCK 值（写入寄存器前通常需解锁，请对照最新数据手册确认） */
-#define LOCK_UNLOCK               0x6U  /* 110b：解锁 */
-#define LOCK_NORMAL               0x3U  /* 011b：锁定 */
+/* LOCK 值 */
+#define LOCK_UNLOCK               0x3U  /* 011b：解锁全部控制寄存器 */
+#define LOCK_NORMAL               0x6U  /* 110b：锁定，除 LOCK 外忽略写入 */
 
 /* =============== BRG_CTRL1 (0x09) 半桥控制 =============== */
 #define BRG_CTRL_HIZ              0x0U  /* 高阻 */
@@ -116,10 +118,10 @@ extern "C" {
 #define IC_STAT2_SCLK_FLT         (1U << 1U)
 
 /* =============== PWM_CTRL2/3/4 快速定义 =============== */
-#define PWM_CTRL2_IN1_MODE_Pos    6U
-#define PWM_CTRL2_IN2_MODE_Pos    4U
-#define PWM_CTRL2_IN3_MODE_Pos    0U  /* 请按实际数据手册核对 */
-#define PWM_CTRL2_IN4_MODE_Pos    2U  /* 请按实际数据手册核对 */
+#define PWM_CTRL2_IN1_MODE_Pos    7U
+#define PWM_CTRL2_IN2_MODE_Pos    6U
+#define PWM_CTRL2_IN3_MODE_Pos    3U
+#define PWM_CTRL2_IN4_MODE_Pos    2U
 
 /* 半桥编号 */
 #define DRV8714_HB1               1U

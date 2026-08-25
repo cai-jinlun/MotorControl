@@ -158,16 +158,16 @@ void DRV8714_DefaultHBridgeConfig(void)
     /* 确保 CS 初始高电平（CubeMX 已配置 PD0 初始 SET，此处再保险一次） */
     DRV8714_CS_High();
 
-    /* 解锁寄存器（如需要），写入默认 LOCK 解锁值 */
+    /* 解锁全部控制寄存器 */
     ctrl1 = DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);
     ctrl1 &= ~IC_CTRL1_LOCK_Msk;
     ctrl1 |= (LOCK_UNLOCK << IC_CTRL1_LOCK_Pos);
     DRV8714_WriteReg(DRV8714_REG_IC_CTRL1, ctrl1);
 
-    /* H 桥模式：HB1/HB2 组成一个 H 桥，HB3/HB4 组成另一个 H 桥 */
+    /* 双输入 PWM H 桥模式：HB1/HB2 和 HB3/HB4 分别组成 H 桥 */
     ctrl1 = DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);
     ctrl1 &= ~IC_CTRL1_BRG_MODE_Msk;
-    ctrl1 |= (BRG_MODE_H_BRIDGE << IC_CTRL1_BRG_MODE_Pos);
+    ctrl1 |= (BRG_MODE_H_BRIDGE_PWM << IC_CTRL1_BRG_MODE_Pos);
     DRV8714_WriteReg(DRV8714_REG_IC_CTRL1, ctrl1);
 
     /* 
