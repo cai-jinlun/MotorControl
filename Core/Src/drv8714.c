@@ -170,30 +170,29 @@ void DRV8714_DefaultHBridgeConfig(void)
     ctrl1 |= (LOCK_UNLOCK << IC_CTRL1_LOCK_Pos);
     DRV8714_WriteReg(DRV8714_REG_IC_CTRL1, ctrl1);
 
+    /* 模式切换和驱动使能期间，先将两路 H 桥都保持为高阻。 */
+    DRV8714_WriteReg(DRV8714_REG_BRG_CTRL2,
+                     BRG_CTRL2_HIZ1_Msk | BRG_CTRL2_HIZ2_Msk);
+
     /* 双输入 PWM H 桥模式：HB1/HB2 和 HB3/HB4 分别组成 H 桥 */
     ctrl1 = DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);
     ctrl1 &= ~IC_CTRL1_BRG_MODE_Msk;
     ctrl1 |= (BRG_MODE_H_BRIDGE_PWM << IC_CTRL1_BRG_MODE_Pos);
     DRV8714_WriteReg(DRV8714_REG_IC_CTRL1, ctrl1);
 
-    /* 
-     * 默认只使能 HB1/HB2 用于第一路电机，由 PWM1(PB3=IN1) 和 PWM2(PB10=IN2) 控制。
-     * HB3/HB4 置高阻，如需第二路电机请自行改为 PWM 模式并映射到可用 PWM。
-     */
-    DRV8714_WriteReg(DRV8714_REG_BRG_CTRL1,
-                     (BRG_CTRL_PWM << BRG_CTRL1_HB1_Pos) |
-                     (BRG_CTRL_PWM << BRG_CTRL1_HB2_Pos) |
-                     (BRG_CTRL_HIZ << BRG_CTRL1_HB3_Pos) |
-                     (BRG_CTRL_HIZ << BRG_CTRL1_HB4_Pos));
-
-    /* PWM 映射：HB1->IN1(PWM1), HB2->IN2(PWM2)，其余半桥不映射 */
-    DRV8714_WriteReg(DRV8714_REG_PWM_CTRL1,
-                     (PWM_MAP_IN1 << PWM_CTRL1_HB1_Pos) |
-                     (PWM_MAP_IN2 << PWM_CTRL1_HB2_Pos) |
-                     (PWM_MAP_IN1 << PWM_CTRL1_HB3_Pos) |
-                     (PWM_MAP_IN2 << PWM_CTRL1_HB4_Pos));
+    /* 四个输入均来自外部引脚；两路 H 桥均选择低侧主动续流。 */
+    DRV8714_WriteReg(DRV8714_REG_PWM_CTRL2,
+                     (PWM_INPUT_FROM_PIN << PWM_CTRL2_IN1_MODE_Pos) |
+                     (PWM_INPUT_FROM_PIN << PWM_CTRL2_IN2_MODE_Pos) |
+                     (PWM_FREEWHEEL_LOW_SIDE << PWM_CTRL2_FW1_Pos) |
+                     (PWM_INPUT_FROM_PIN << PWM_CTRL2_IN3_MODE_Pos) |
+                     (PWM_INPUT_FROM_PIN << PWM_CTRL2_IN4_MODE_Pos) |
+                     (PWM_FREEWHEEL_LOW_SIDE << PWM_CTRL2_FW2_Pos));
 
     /* 清故障并开启驱动 */
     DRV8714_ClearFault();
     DRV8714_EnableDriver();
+
+    /* 只开放第一路 H 桥；HB3/HB4 继续由 HIZ2 保持高阻。 */
+    DRV8714_WriteReg(DRV8714_REG_BRG_CTRL2, BRG_CTRL2_HIZ2_Msk);
 }

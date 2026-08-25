@@ -94,6 +94,17 @@ extern "C" {
 #define BRG_CTRL1_HB3_Pos         2U
 #define BRG_CTRL1_HB4_Pos         0U
 
+/* =============== BRG_CTRL2 (0x0A) H 桥控制 =============== */
+#define BRG_CTRL2_S_IN1_Pos       7U
+#define BRG_CTRL2_S_IN2_Pos       6U
+#define BRG_CTRL2_HIZ1_Pos        5U
+#define BRG_CTRL2_S_IN3_Pos       3U
+#define BRG_CTRL2_S_IN4_Pos       2U
+#define BRG_CTRL2_HIZ2_Pos        1U
+
+#define BRG_CTRL2_HIZ1_Msk        (1U << BRG_CTRL2_HIZ1_Pos)
+#define BRG_CTRL2_HIZ2_Msk        (1U << BRG_CTRL2_HIZ2_Pos)
+
 /* =============== PWM_CTRL1 (0x0B) PWM 输入映射 =============== */
 #define PWM_CTRL1_HB1_Pos         6U
 #define PWM_CTRL1_HB2_Pos         4U
@@ -124,11 +135,18 @@ extern "C" {
 #define IC_STAT2_WD_FLT           (1U << 2U)
 #define IC_STAT2_SCLK_FLT         (1U << 1U)
 
-/* =============== PWM_CTRL2/3/4 快速定义 =============== */
+/* =============== PWM_CTRL2 (0x0C) H 桥输入与续流配置 =============== */
 #define PWM_CTRL2_IN1_MODE_Pos    7U
 #define PWM_CTRL2_IN2_MODE_Pos    6U
+#define PWM_CTRL2_FW1_Pos         5U
 #define PWM_CTRL2_IN3_MODE_Pos    3U
 #define PWM_CTRL2_IN4_MODE_Pos    2U
+#define PWM_CTRL2_FW2_Pos         1U
+
+#define PWM_INPUT_FROM_PIN        0x0U
+#define PWM_INPUT_FROM_SPI        0x1U
+#define PWM_FREEWHEEL_LOW_SIDE    0x0U
+#define PWM_FREEWHEEL_HIGH_SIDE   0x1U
 
 /* 半桥编号 */
 #define DRV8714_HB1               1U
@@ -153,13 +171,13 @@ void DRV8714_EnableDriver(void);
 void DRV8714_DisableDriver(void);
 void DRV8714_ClearFault(void);
 
-/* 设置单个半桥控制模式：BRG_CTRL_HIZ/LS/HS/PWM */
+/* 独立半桥模式专用：设置单个半桥为 BRG_CTRL_HIZ/LS/HS/PWM */
 void DRV8714_SetHalfBridge(uint8_t hb, uint8_t mode);
 
-/* 将半桥映射到 PWM 输入：PWM_MAP_IN1/IN2/IN3/IN4 */
+/* 独立半桥模式专用：将半桥映射到 PWM_MAP_IN1/IN2/IN3/IN4 */
 void DRV8714_MapHalfBridgePWM(uint8_t hb, uint8_t pwm_in);
 
-/* 默认配置示例：H 桥模式，HB1/HB2 由 IN1/IN2 控制，HB3/HB4 由 IN3/IN4 控制 */
+/* 默认配置：HB1/HB2 使用 IN1/IN2 双 PWM，HB3/HB4 保持高阻 */
 void DRV8714_DefaultHBridgeConfig(void);
 
 #ifdef __cplusplus
