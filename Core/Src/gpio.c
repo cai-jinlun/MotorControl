@@ -54,16 +54,19 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(CAN_Silent_GPIO_Port, CAN_Silent_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, CAN_Silent_Pin|BRAKE_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, H3_INA_Pin|H3_INB_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, H3_INA_Pin|H3_INB_Pin|DRVOFF_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, H4_INB_Pin|H4_INA_Pin|H5_INB_Pin|H5_INA_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(H_CS_GPIO_Port, H_CS_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(nSLEEP_GPIO_Port, nSLEEP_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : HALF_Pin FULL_Pin CENTRAL_Pin KEY1_Pin
                            KEY2_Pin KEY3_Pin */
@@ -73,12 +76,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : CAN_Silent_Pin */
-  GPIO_InitStruct.Pin = CAN_Silent_Pin;
+  /*Configure GPIO pins : CAN_Silent_Pin BRAKE_Pin */
+  GPIO_InitStruct.Pin = CAN_Silent_Pin|BRAKE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(CAN_Silent_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : H3_INA_Pin H3_INB_Pin */
   GPIO_InitStruct.Pin = H3_INA_Pin|H3_INB_Pin;
@@ -100,6 +103,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(H_CS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : nSLEEP_Pin DRVOFF_Pin */
+  GPIO_InitStruct.Pin = nSLEEP_Pin|DRVOFF_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 

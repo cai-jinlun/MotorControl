@@ -15,9 +15,8 @@
   *   - bit7-0:  读出数据（读操作）或上次写入数据/无关（写操作）
   * 
   * 注意：
-  *   1. 当前 CubeMX 配置 SPI3 为 16-bit、CPOL=LOW、CPHA=1EDGE。
-  *      若与 DRV8714 实际要求不符（常见为 CPHA=2EDGE），请在 CubeMX 中修改
-  *      SPI3 的 Clock Phase 后重新生成代码。
+  *   1. 当前 CubeMX 配置 SPI3 为 16-bit、CPOL=LOW、CPHA=2EDGE，
+  *      满足 DRV8714 在下降沿采样、上升沿更新数据的时序要求。
   *   2. 本文件只涉及 SPI 读写与 PWM 控制，具体电机拓扑（H 桥/独立半桥）
   *      请通过 DRV8714_DefaultHBridgeConfig() 或自行配置寄存器实现。
   ******************************************************************************
@@ -31,6 +30,7 @@
 #define DRV8714_SPI_ADDR_SHIFT    8U
 #define DRV8714_SPI_ADDR_MSK      0x3FU
 #define DRV8714_SPI_DATA_MSK      0xFFU
+#define DRV8714_WAKE_DELAY_MS     1U
 
 /* 片选拉低/拉高 */
 static inline void DRV8714_CS_Low(void)
@@ -157,6 +157,12 @@ void DRV8714_DefaultHBridgeConfig(void)
 
     /* 确保 CS 初始高电平（CubeMX 已配置 PD0 初始 SET，此处再保险一次） */
     DRV8714_CS_High();
+
+    /* 禁用掉电制动和硬件关断，唤醒器件并等待数字内核可访问。 */
+    HAL_GPIO_WritePin(DRV8714_BRAKE_PORT, DRV8714_BRAKE_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(DRV8714_DRVOFF_PORT, DRV8714_DRVOFF_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(DRV8714_NSLEEP_PORT, DRV8714_NSLEEP_PIN, GPIO_PIN_SET);
+    HAL_Delay(DRV8714_WAKE_DELAY_MS);
 
     /* 解锁全部控制寄存器 */
     ctrl1 = DRV8714_ReadReg(DRV8714_REG_IC_CTRL1);

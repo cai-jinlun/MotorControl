@@ -75,6 +75,8 @@ void Error_Handler(void);
 #define H1_Hall_B_GPIO_Port GPIOE
 #define CAN_Silent_Pin GPIO_PIN_12
 #define CAN_Silent_GPIO_Port GPIOE
+#define BRAKE_Pin GPIO_PIN_15
+#define BRAKE_GPIO_Port GPIOE
 #define H1_PWM2_Pin GPIO_PIN_10
 #define H1_PWM2_GPIO_Port GPIOB
 #define H3_INA_Pin GPIO_PIN_12
@@ -103,6 +105,10 @@ void Error_Handler(void);
 #define H_CS_GPIO_Port GPIOD
 #define H1_PWM1_Pin GPIO_PIN_3
 #define H1_PWM1_GPIO_Port GPIOB
+#define nSLEEP_Pin GPIO_PIN_4
+#define nSLEEP_GPIO_Port GPIOB
+#define DRVOFF_Pin GPIO_PIN_5
+#define DRVOFF_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

@@ -7,6 +7,7 @@
   *   - SPI3:  PC10=SCK, PC11=SDO(MISO), PC12=SDI(MOSI), PD0=nSCS(H_CS)
   *   - PWM1: PB3  = TIM2_CH2 (H1_PWM1)
   *   - PWM2: PB10 = TIM2_CH3 (H1_PWM2)
+  *   - 控制: PB4=nSLEEP, PB5=DRVOFF, PE15=BRAKE
   ******************************************************************************
   */
 #ifndef __DRV8714_H
@@ -22,6 +23,12 @@ extern "C" {
 #define DRV8714_SPI_HANDLE        (&hspi3)
 #define DRV8714_CS_PORT           H_CS_GPIO_Port
 #define DRV8714_CS_PIN            H_CS_Pin
+#define DRV8714_NSLEEP_PORT       nSLEEP_GPIO_Port
+#define DRV8714_NSLEEP_PIN        nSLEEP_Pin
+#define DRV8714_DRVOFF_PORT       DRVOFF_GPIO_Port
+#define DRV8714_DRVOFF_PIN        DRVOFF_Pin
+#define DRV8714_BRAKE_PORT        BRAKE_GPIO_Port
+#define DRV8714_BRAKE_PIN         BRAKE_Pin
 
 /* =============== 寄存器地址 =============== */
 #define DRV8714_REG_IC_STAT1      0x00U
