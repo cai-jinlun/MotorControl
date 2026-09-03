@@ -25,14 +25,14 @@ extern "C" {
 #define QE_CH_B_PORT          H1_Hall_B_GPIO_Port
 #define QE_CH_B_NUM           TIM_CHANNEL_2
 
-/* TIM1 配置：168 MHz / 16800 = 10 kHz，1 tick = 100 us */
-#define QE_TIM_TICK_US        100U
+/* TIM1 配置：168 MHz / 168 = 1 MHz，1 tick = 1 us */
+#define QE_TIM_TICK_US        1U
 
-/*定时器period */
-#define QE_TIM_PERIOD         1000U
+/* TIM1 自动重装周期：ARR(50000 - 1) + 1 = 50000 tick */
+#define QE_TIM_PERIOD         50000U
 
-/* 默认堵转超时：超过该时间未收到脉冲认为速度为 0，单位 tick(0.1ms) */
-#define QE_PULSE_TIMEOUT_TICK   10000U
+/* 默认堵转超时：超过 1 s 未收到脉冲认为速度为 0，单位 tick(1 us) */
+#define QE_PULSE_TIMEOUT_TICK   1000000U
 
 typedef struct
 {
